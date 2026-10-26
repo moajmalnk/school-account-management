@@ -30,6 +30,11 @@ import {
   type AttendanceRosterStudent,
   type StudentAttendanceStatus,
 } from "@/lib/student-attendance";
+import { sessionStaffClassScopeId, useAuth } from "@/lib/auth";
+import {
+  assignedClassNamesForStaff,
+  studentInAssignedClasses,
+} from "@/lib/student-csv";
 import { useTenantStore } from "@/lib/tenant-store";
 import {
   loadWhatsAppTemplates,
@@ -61,8 +66,26 @@ export function MarkStudentAttendanceModal({
   initialDivision?: string;
   onSaved?: () => void;
 }) {
-  const { classes: classConfigs, schoolDetails } = useTenantStore();
+  const { classes: allClassConfigs, schoolDetails } = useTenantStore();
+  const { session } = useAuth();
   const schoolName = schoolDetails.name || "School";
+  const classScopeStaffId = sessionStaffClassScopeId(session);
+  const assignedClassNames = useMemo(
+    () =>
+      classScopeStaffId ? assignedClassNamesForStaff(allClassConfigs, classScopeStaffId) : [],
+    [allClassConfigs, classScopeStaffId],
+  );
+  const classConfigs = useMemo(() => {
+    if (!classScopeStaffId || assignedClassNames.length === 0) {
+      return classScopeStaffId ? [] : allClassConfigs;
+    }
+    return allClassConfigs.filter((c) =>
+      studentInAssignedClasses(
+        c.className || `${c.grade}${c.section ? ` - ${c.section}` : ""}`,
+        assignedClassNames,
+      ),
+    );
+  }, [allClassConfigs, classScopeStaffId, assignedClassNames]);
 
   const [gradeFilter, setGradeFilter] = useState(initialClass);
   const [divisionFilter, setDivisionFilter] = useState(initialDivision);
@@ -118,10 +141,16 @@ export function MarkStudentAttendanceModal({
     })
       .then((res) => {
         if (cancelled) return;
-        setRoster(res.students);
+        const scoped =
+          classScopeStaffId && assignedClassNames.length > 0
+            ? res.students.filter((s) => studentInAssignedClasses(s.cls, assignedClassNames))
+            : classScopeStaffId
+              ? []
+              : res.students;
+        setRoster(scoped);
         const next: DraftMap = {};
         const saved: DraftMap = {};
-        for (const s of res.students) {
+        for (const s of scoped) {
           if (s.status) {
             next[s.studentId] = s.status;
             saved[s.studentId] = s.status;

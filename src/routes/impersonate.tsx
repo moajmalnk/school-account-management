@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowLeft, Ban, KeyRound, Loader2, ShieldAlert, UserX } 
 import { Button } from "@/components/ui/button";
 import { ApiError, apiRequest, setImpersonationApiToken } from "@/lib/api/client";
 import { impersonateSuperAdminTenant } from "@/lib/api/super-admin";
-import { readPersistentSession, writeImpersonationSession } from "@/lib/auth";
+import { readPersistentSession, readSession, writeImpersonationSession } from "@/lib/auth";
 import {
   ALL_PERMISSIONS,
   firstAllowedTenantPath,
@@ -25,6 +25,11 @@ type ImpersonateSearch = {
   email?: string;
   /** Campus public ids this preview may open (comma-separated). */
   branches?: string;
+  /** Staff profile public id for Login as when no team user is linked. */
+  staff?: string;
+  /** Tenant public id / name when starting Login as from a Preview tab. */
+  workspace?: string;
+  workspaceName?: string;
   /** Super-admin tenant impersonation (opens in this tab via API). */
   tenant?: string;
 };
@@ -79,6 +84,9 @@ export const Route = createFileRoute("/impersonate")({
     name: str(search.name),
     email: str(search.email),
     branches: str(search.branches),
+    staff: str(search.staff),
+    workspace: str(search.workspace),
+    workspaceName: str(search.workspaceName),
     tenant: str(search.tenant),
   }),
   component: ImpersonatePage,
@@ -184,6 +192,9 @@ function ImpersonatePage() {
     name,
     email: emailParam,
     branches: branchesParam,
+    staff: staffId,
+    workspace: workspaceParam,
+    workspaceName: workspaceNameParam,
     tenant: tenantId,
   } = Route.useSearch();
   const [error, setError] = useState<string | null>(null);
@@ -193,6 +204,7 @@ function ImpersonatePage() {
 
     const run = async () => {
       const adminSession = readPersistentSession();
+      const liveSession = readSession();
       if (
         !adminSession ||
         (adminSession.role !== "school_admin" && adminSession.role !== "super_admin")
@@ -200,6 +212,16 @@ function ImpersonatePage() {
         setError("Sign in as an admin first, then use Impersonate again.");
         return;
       }
+
+      // Prefer explicit workspace from the Login as link, then live Preview, then admin login.
+      const workspaceTenantId =
+        workspaceParam || liveSession?.tenantId || adminSession.tenantId;
+      const workspaceTenantName =
+        workspaceNameParam || liveSession?.tenantName || adminSession.tenantName;
+      const workspacePdfCredit =
+        typeof liveSession?.pdfCreditEnabled === "boolean"
+          ? liveSession.pdfCreditEnabled
+          : adminSession.pdfCreditEnabled;
 
       const branchesFromQuery = parseBranchIdsParam(branchesParam);
 
@@ -260,25 +282,29 @@ function ImpersonatePage() {
           setError(`${user.displayName} is inactive. Activate the user before impersonating.`);
           return;
         }
+        if (!workspaceTenantId) {
+          setError("Open the school workspace first, then use Login as.");
+          return;
+        }
         // URL branches win (explicit ACL from Settings); fall back to API/stored campuses.
         const branchIds = branchesFromQuery.length > 0 ? branchesFromQuery : (user.branchIds ?? []);
         writeImpersonationSession({
           role: "tenant_user",
           email: user.email,
           displayName: user.displayName,
-          tenantName: adminSession.tenantName,
-          tenantId: adminSession.tenantId,
+          tenantName: workspaceTenantName || workspaceTenantId,
+          tenantId: workspaceTenantId,
           issuedAt: Date.now(),
           userId: user.id,
           staffId: user.staffId,
           permissions: user.permissions,
           branchIds,
-          ...(typeof adminSession.pdfCreditEnabled === "boolean"
-            ? { pdfCreditEnabled: adminSession.pdfCreditEnabled }
+          ...(typeof workspacePdfCredit === "boolean"
+            ? { pdfCreditEnabled: workspacePdfCredit }
             : {}),
           impersonationSource: "school_admin",
         });
-        window.location.replace(firstAllowedTenantPath(user.permissions));
+        window.location.replace(firstAllowedTenantPath(user.permissions, user.staffId));
         return;
       }
 
@@ -288,21 +314,26 @@ function ImpersonatePage() {
           setError("No valid permissions in the preview link.");
           return;
         }
+        if (!workspaceTenantId) {
+          setError("Open the school workspace first, then use Login as.");
+          return;
+        }
         writeImpersonationSession({
           role: "tenant_user",
           email: emailParam?.trim().toLowerCase() || "preview@test",
           displayName: name || "Permission preview",
-          tenantName: adminSession.tenantName,
-          tenantId: adminSession.tenantId,
+          tenantName: workspaceTenantName || workspaceTenantId,
+          tenantId: workspaceTenantId,
           issuedAt: Date.now(),
+          ...(staffId ? { staffId } : {}),
           permissions,
           branchIds: branchesFromQuery,
-          ...(typeof adminSession.pdfCreditEnabled === "boolean"
-            ? { pdfCreditEnabled: adminSession.pdfCreditEnabled }
+          ...(typeof workspacePdfCredit === "boolean"
+            ? { pdfCreditEnabled: workspacePdfCredit }
             : {}),
           impersonationSource: "school_admin",
         });
-        window.location.replace(firstAllowedTenantPath(permissions));
+        window.location.replace(firstAllowedTenantPath(permissions, staffId));
         return;
       }
 
@@ -313,7 +344,17 @@ function ImpersonatePage() {
     return () => {
       cancelled = true;
     };
-  }, [userId, perms, name, emailParam, branchesParam, tenantId]);
+  }, [
+    userId,
+    perms,
+    name,
+    emailParam,
+    branchesParam,
+    staffId,
+    workspaceParam,
+    workspaceNameParam,
+    tenantId,
+  ]);
 
   const info = useMemo(() => (error ? interpretError(error) : null), [error]);
 

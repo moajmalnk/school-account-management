@@ -395,9 +395,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
+  isStaffSelfPreviewSession,
   sessionCanAccessSettings,
   sessionCanAccessSettingsTab,
   sessionCanAccessFinanceView,
+  sessionStaffClassScopeId,
   useAuth,
 } from "@/lib/auth";
 import {
@@ -505,6 +507,7 @@ import { apiSaveDashboardTodos } from "@/lib/api/dashboard";
 import { apiUploadDataUrl } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import {
+  assignedClassNamesForStaff,
   buildClassFromLabel,
   findMissingClassTiers,
   isDuplicateStudent,
@@ -515,6 +518,7 @@ import {
   normalizeClassLabelKey,
   parseStudentTable,
   splitStudentClassForCsv,
+  studentInAssignedClasses,
   STUDENT_CSV_HEADERS,
 } from "@/lib/student-csv";
 import {
@@ -3476,6 +3480,7 @@ export function StudentsLedger() {
     transportRoutes,
     studentFeeBreaks,
   } = useTenantStore();
+  const { session } = useAuth();
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/students" }) as {
     id?: string;
@@ -3483,6 +3488,16 @@ export function StudentsLedger() {
   const activeStudentViewId = search.id ?? null;
   const defaultClass = classes[0]?.className ?? "";
   const schoolName = schoolDetails.name || "Silver Hills Global";
+  const classScopeStaffId = sessionStaffClassScopeId(session);
+  const assignedClassNames = useMemo(
+    () =>
+      classScopeStaffId ? assignedClassNamesForStaff(classes, classScopeStaffId) : [],
+    [classes, classScopeStaffId],
+  );
+  const scopeToAssignedClasses = Boolean(classScopeStaffId && assignedClassNames.length > 0);
+  const hideUnassignedTeacherStudents = Boolean(
+    classScopeStaffId && assignedClassNames.length === 0 && isStaffSelfPreviewSession(session),
+  );
 
   const openStudent = (id: string) => navigate({ to: "/tenant/students", search: { id } });
   const openStudentEdit = (id: string) => navigate({ to: "/tenant/students/edit", search: { id } });
@@ -3517,17 +3532,39 @@ export function StudentsLedger() {
 
   const openAdmitPage = () => navigate({ to: "/tenant/students/admit" });
 
-  const liveStudents = useMemo(
-    () => students.filter((s) => !isRecordDeleted(s.deletedAt)),
-    [students],
-  );
-  const deletedStudents = useMemo(
-    () =>
-      allStudents
-        .filter((s) => isRecordDeleted(s.deletedAt))
-        .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? "")),
-    [allStudents],
-  );
+  const liveStudents = useMemo(() => {
+    const all = students.filter((s) => !isRecordDeleted(s.deletedAt));
+    if (hideUnassignedTeacherStudents) return [];
+    if (!scopeToAssignedClasses) return all;
+    return all.filter((s) => studentInAssignedClasses(s.cls, assignedClassNames));
+  }, [
+    students,
+    hideUnassignedTeacherStudents,
+    scopeToAssignedClasses,
+    assignedClassNames,
+  ]);
+  const deletedStudents = useMemo(() => {
+    if (scopeToAssignedClasses || hideUnassignedTeacherStudents) return [];
+    return allStudents
+      .filter((s) => isRecordDeleted(s.deletedAt))
+      .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
+  }, [allStudents, scopeToAssignedClasses, hideUnassignedTeacherStudents]);
+
+  // Block deep-links to students outside this teacher's assigned classes.
+  useEffect(() => {
+    if (!activeStudentViewId) return;
+    if (!scopeToAssignedClasses && !hideUnassignedTeacherStudents) return;
+    const allowed = liveStudents.some((s) => s.id === activeStudentViewId);
+    if (!allowed) {
+      navigate({ to: "/tenant/students", search: {}, replace: true });
+    }
+  }, [
+    activeStudentViewId,
+    liveStudents,
+    scopeToAssignedClasses,
+    hideUnassignedTeacherStudents,
+    navigate,
+  ]);
 
   useEffect(() => {
     if (!hydrated || !branchContentReady) return;
@@ -5507,14 +5544,23 @@ export function StaffRoster() {
     schoolDetails,
     academicYear,
   } = useTenantStore();
+  const { session } = useAuth();
   const schoolName = schoolDetails.name || "School";
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/staff" }) as { id?: string };
-  const activeStaffViewId = search.id ?? null;
+  const selfStaffOnly = isStaffSelfPreviewSession(session);
+  const selfStaffId = selfStaffOnly ? session?.staffId?.trim() || null : null;
+  const activeStaffViewId = search.id ?? selfStaffId;
 
   const openStaff = (id: string) => navigate({ to: "/tenant/staff", search: { id } });
   const openStaffEdit = (id: string) => navigate({ to: "/tenant/staff/edit", search: { id } });
-  const closeStaff = () => navigate({ to: "/tenant/staff", search: {} });
+  const closeStaff = () => {
+    if (selfStaffId) {
+      navigate({ to: "/tenant/staff", search: { id: selfStaffId } });
+      return;
+    }
+    navigate({ to: "/tenant/staff", search: {} });
+  };
 
   const defaultDept = departments[0]?.name ?? "";
   const defaultRole = roles[0]?.title ?? "Teacher";
@@ -5558,14 +5604,24 @@ export function StaffRoster() {
     }));
   }, [departments, defaultDept, defaultRole, roles]);
 
-  const liveStaff = useMemo(() => staff.filter((s) => !isRecordDeleted(s.deletedAt)), [staff]);
-  const deletedStaff = useMemo(
-    () =>
-      staff
-        .filter((s) => isRecordDeleted(s.deletedAt))
-        .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? "")),
-    [staff],
-  );
+  const liveStaff = useMemo(() => {
+    const all = staff.filter((s) => !isRecordDeleted(s.deletedAt));
+    if (!selfStaffId) return all;
+    return all.filter((s) => s.id === selfStaffId);
+  }, [staff, selfStaffId]);
+  const deletedStaff = useMemo(() => {
+    if (selfStaffOnly) return [];
+    return staff
+      .filter((s) => isRecordDeleted(s.deletedAt))
+      .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
+  }, [staff, selfStaffOnly]);
+
+  // Staff Login as preview: always open that person's profile, never the full directory.
+  useEffect(() => {
+    if (!selfStaffId) return;
+    if (search.id === selfStaffId) return;
+    navigate({ to: "/tenant/staff", search: { id: selfStaffId }, replace: true });
+  }, [selfStaffId, search.id, navigate]);
 
   const activeStaff = useMemo(
     () => (activeStaffViewId ? (liveStaff.find((s) => s.id === activeStaffViewId) ?? null) : null),
@@ -17762,9 +17818,11 @@ function ClassesCard({
   staff: Staff[];
   feeTerms: FeeTerm[];
 }) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ClassConfig | null>(null);
+  const [rosterClass, setRosterClass] = useState<ClassConfig | null>(null);
   const [cleaningInvalid, setCleaningInvalid] = useState(false);
   const [confirmCleanInvalid, setConfirmCleanInvalid] = useState(false);
   type FeeDraftRow = { id: string; label: string; amount: string; dueDate: string };
@@ -18091,12 +18149,32 @@ function ClassesCard({
     setOpen(false);
   };
 
-  const enrolledCount = (className: string) =>
-    students.filter((s) => !isRecordDeleted(s.deletedAt) && studentBelongsToClass(s.cls, className))
-      .length;
+  const enrolledStudentsForClass = (className: string) =>
+    students
+      .filter((s) => !isRecordDeleted(s.deletedAt) && studentBelongsToClass(s.cls, className))
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+  const enrolledCount = (className: string) => enrolledStudentsForClass(className).length;
+
+  const openClassRoster = (c: ClassConfig) => {
+    setRosterClass(normalizeClassConfig(c));
+  };
+
+  const openStudentFromRoster = (studentId: string) => {
+    setRosterClass(null);
+    navigate({ to: "/tenant/students", search: { id: studentId } });
+  };
 
   const blockingCount = (classConfig: ClassConfig) =>
     classBlockingEnrollmentCount(classConfig, allStudents, studentYearLedgers);
+
+  const rosterStudents = useMemo(
+    () => (rosterClass ? enrolledStudentsForClass(rosterClass.className) : []),
+    // enrolledStudentsForClass closes over students
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rosterClass, students],
+  );
 
   const requestDelete = (c: ClassConfig) => {
     const count = blockingCount(c);
@@ -18382,8 +18460,15 @@ function ClassesCard({
                       <dt className="text-[9.5px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
                         Students
                       </dt>
-                      <dd className="mt-0.5 font-mono text-[14px] font-semibold text-slate-900 dark:text-zinc-100">
-                        {meta.count}
+                      <dd className="mt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => openClassRoster(c)}
+                          aria-label={`View ${meta.count} students in ${meta.normalized.className}`}
+                          className="font-mono text-[14px] font-semibold text-[#0F766E] underline-offset-2 hover:underline dark:text-teal-300"
+                        >
+                          {meta.count}
+                        </button>
                       </dd>
                     </div>
                     <div className="border-x border-black/5 px-2 py-2.5 text-center dark:border-white/10">
@@ -18464,7 +18549,15 @@ function ClassesCard({
                         {meta.div}
                       </td>
                       <td className="px-2 py-2.5 align-middle font-mono text-black dark:text-zinc-100">
-                        {meta.count}
+                        <button
+                          type="button"
+                          onClick={() => openClassRoster(c)}
+                          aria-label={`View ${meta.count} students in ${meta.normalized.className}`}
+                          title="View students in this class"
+                          className="inline-flex min-w-[2rem] items-center justify-center rounded-full px-2 py-0.5 font-mono text-[12.5px] font-semibold text-[#0F766E] transition-colors hover:bg-[#F0FDFA] hover:underline dark:text-teal-300 dark:hover:bg-teal-950/50"
+                        >
+                          {meta.count}
+                        </button>
                       </td>
                       <td className="px-2 py-2.5 align-middle font-mono font-medium text-black dark:text-zinc-100">
                         {formatMoney(meta.normalized.tuitionFeeAmount)}
@@ -18493,6 +18586,70 @@ function ClassesCard({
           </div>
         </>
       )}
+
+      <Dialog
+        open={Boolean(rosterClass)}
+        onOpenChange={(next) => {
+          if (!next) setRosterClass(null);
+        }}
+      >
+        <DialogContent className="max-h-[85vh] overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white p-0 sm:max-w-lg dark:border-white/10 dark:bg-zinc-900">
+          <DialogHeader className="border-b border-[#F0F0F0] px-5 py-4 dark:border-white/10">
+            <DialogTitle className="text-[18px] font-semibold text-slate-900 dark:text-zinc-50">
+              {rosterClass?.className || "Class"} students
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px] text-black/55 dark:text-zinc-400">
+              {rosterStudents.length === 0
+                ? "No students enrolled in this class yet."
+                : `${rosterStudents.length} student${rosterStudents.length === 1 ? "" : "s"} · open a row for the full profile`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[min(28rem,55vh)] overflow-y-auto px-2 py-2">
+            {rosterStudents.length === 0 ? (
+              <p className="px-3 py-8 text-center text-[13px] text-black/45 dark:text-zinc-500">
+                Admit or move students into this class to see them here.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {rosterStudents.map((student, index) => (
+                  <li key={student.id}>
+                    <button
+                      type="button"
+                      onClick={() => openStudentFromRoster(student.id)}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[#F0FDFA] dark:hover:bg-teal-950/40"
+                    >
+                      <span className="w-6 shrink-0 text-center font-mono text-[11px] text-black/40 dark:text-zinc-500">
+                        {index + 1}
+                      </span>
+                      <DirectoryPersonAvatar name={student.name} photoUrl={student.photoUrl} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13.5px] font-semibold text-slate-900 dark:text-zinc-50">
+                          {student.name}
+                        </span>
+                        <span className="mt-0.5 block truncate font-mono text-[11px] text-black/45 dark:text-zinc-500">
+                          {student.id}
+                          {student.phone ? ` · ${formatPhone(student.phone)}` : ""}
+                        </span>
+                      </span>
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[#0F766E] dark:text-teal-300" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <DialogFooter className="border-t border-[#F0F0F0] px-5 py-3 dark:border-white/10">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setRosterClass(null)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <DeleteConfirmDialog
         open={Boolean(pendingDelete)}

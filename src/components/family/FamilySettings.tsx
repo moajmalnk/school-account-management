@@ -245,7 +245,7 @@ export function FamilySettings() {
               void endPreview();
               return;
             }
-            void signOut().then(() => navigate({ href: "/family/login" }));
+            void signOut().then(() => navigate({ href: "/login" }));
           }}
         >
           {leaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}

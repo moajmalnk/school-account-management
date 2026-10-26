@@ -35,6 +35,7 @@ import { clearBranchContext, setBranchContext } from "@/lib/branch-context";
 import {
   ALL_PERMISSIONS,
   firstAllowedTenantPath,
+  hasFullAccess,
   hasPermission as hasPermissionKey,
   hasAnyFinance as hasAnyFinancePerm,
   canAccessSettingsTab as canAccessSettingsTabPerm,
@@ -90,7 +91,8 @@ export type LoginResult =
 type AuthState = {
   session: Session | null;
   hydrated: boolean;
-  login: (email: string, password: string) => Promise<LoginResult>;
+  /** Email or staff phone (linked HR profile). */
+  login: (identifier: string, password: string) => Promise<LoginResult>;
   /** Sign in with a Google Identity Services ID token (credential JWT). */
   loginWithGoogle: (credential: string) => Promise<LoginResult>;
   /** Apply tokens already persisted by apiRegisterTrial / similar. */
@@ -376,6 +378,29 @@ export function endImpersonation(): string {
   return source === "super_admin" ? "/super-admin/tenants" : "/tenant/settings?tab=users";
 }
 
+/** Staff profile Login as preview (no Settings → Users link) — only their own record. */
+export function isStaffSelfPreviewSession(session: Session | null | undefined): boolean {
+  if (!session?.staffId || session.role !== "tenant_user") return false;
+  return Boolean(session.email?.toLowerCase().includes("@preview.feezo.app"));
+}
+
+/**
+ * Staff id used to scope Students / Attendance to Class Tier assignments.
+ * School admins and users with Settings access keep the full directory.
+ */
+export function sessionStaffClassScopeId(session: Session | null | undefined): string | null {
+  if (!session?.staffId?.trim()) return null;
+  if (session.role === "school_admin" || session.role === "super_admin") return null;
+  if (hasFullAccess(session.permissions)) return null;
+  if (
+    hasPermissionKey(session.permissions, "settings") ||
+    hasPermissionKey(session.permissions, "settings.users")
+  ) {
+    return null;
+  }
+  return session.staffId.trim();
+}
+
 export function sessionHasPermission(
   session: Session | null | undefined,
   key: PermissionKey,
@@ -657,11 +682,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [session]);
 
-  const login = useCallback<AuthState["login"]>(async (email, password) => {
-    const normalizedEmail = email.trim().toLowerCase();
+  const login = useCallback<AuthState["login"]>(async (identifier, password) => {
+    const trimmed = identifier.trim();
+    const normalized = trimmed.includes("@") ? trimmed.toLowerCase() : trimmed;
 
     try {
-      const data = await apiLogin(normalizedEmail, password);
+      const data = await apiLogin(normalized, password);
       return sessionFromApiLogin(data, setSession);
     } catch (err) {
       return { ok: false, error: loginFailureMessage(err) };

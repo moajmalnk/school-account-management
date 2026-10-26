@@ -1629,11 +1629,11 @@ export const HELP_GUIDES: HelpGuide[] = [
       "gmail",
       "staff login",
     ],
-    openTo: { href: "/login", label: "Open staff login" },
+    openTo: { href: "/login", label: "Open login" },
     steps: [
       {
-        title: "Use the staff login page",
-        body: "Go to **feezo.app/login** (school staff and super admin). Parent accounts use **/family/login** instead.",
+        title: "Open the login page",
+        body: "Go to **feezo.app/login**. Staff and admins sign in with **email**; parents use the same page with **phone**.",
       },
       {
         title: "Continue with Google",
@@ -1662,11 +1662,11 @@ export const HELP_GUIDES: HelpGuide[] = [
       "phone login",
       "family app",
     ],
-    openTo: { href: "/family/login", label: "Open parent login" },
+    openTo: { href: "/login", label: "Open login" },
     steps: [
       {
-        title: "Open the parent portal",
-        body: "Go to **feezo.app/family/login** (or Parent sign in from the staff login page).",
+        title: "Open the shared login page",
+        body: "Go to **feezo.app/login** — the same page staff use. Enter the mobile number the school has on file (not email).",
       },
       {
         title: "Sign in with phone",
@@ -1675,7 +1675,7 @@ export const HELP_GUIDES: HelpGuide[] = [
       {
         title: "School side",
         body: "Admins keep guardian phones up to date on the student profile and can invite parents from the Parents app tools where available.",
-        tip: "Parents do not use Continue with Google — that is only for staff on /login.",
+        tip: "Parents do not use Continue with Google — that is only for staff email accounts on /login.",
       },
     ],
     related: ["student-profile", "google-sign-in", "mobile-app"],
@@ -1862,7 +1862,7 @@ export const HELP_FAQS: HelpFaq[] = [
     id: "google-login-how",
     question: "How do I sign in with Google?",
     answer:
-      "Open feezo.app/login and tap Continue with Google. Your Google email must already exist as a Feezo school user or super admin. Parents use /family/login with phone instead.",
+      "Open feezo.app/login and tap Continue with Google. Your Google email must already exist as a Feezo school user or super admin. Parents sign in on the same page with phone instead of Google.",
     guideId: "google-sign-in",
   },
   {
@@ -1876,7 +1876,7 @@ export const HELP_FAQS: HelpFaq[] = [
     id: "parent-vs-staff-login",
     question: "Which login should parents use?",
     answer:
-      "Parents use feezo.app/family/login with the phone number on the student record. Staff and school admins use feezo.app/login (email/password or Google).",
+      "Everyone uses feezo.app/login. Parents enter the phone number on the student record; staff and school admins use email/password or Google.",
     guideId: "parent-portal",
   },
 ];

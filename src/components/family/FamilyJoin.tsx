@@ -122,7 +122,7 @@ export function FamilyJoin({ token }: { token: string }) {
               <span aria-hidden className="text-slate-300">
                 ·
               </span>
-              <Link to="/family/login" className="text-[#0F766E] hover:underline">
+              <Link to="/login" className="text-[#0F766E] hover:underline">
                 Parent sign in
               </Link>
             </div>
@@ -362,7 +362,7 @@ function InviteError({ message }: { message: string }) {
       <h1 className="mt-4 text-2xl font-semibold tracking-tight">This invite can’t be used</h1>
       <p className="mt-2 text-sm leading-6 text-slate-500">{message}</p>
       <Link
-        to="/family/login"
+        to="/login"
         className="mt-6 flex h-12 items-center justify-center rounded-2xl bg-[#0F766E] text-sm font-semibold text-white hover:bg-[#0D9488]"
       >
         Go to parent sign in

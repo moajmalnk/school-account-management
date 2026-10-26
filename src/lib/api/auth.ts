@@ -40,15 +40,22 @@ export type ApiLoginResponse = {
   session: ApiLoginSession;
 };
 
-export async function apiLogin(email: string, password: string): Promise<ApiLoginResponse> {
+/** Staff / admin sign-in — pass email or phone (linked staff profile). */
+export async function apiLogin(identifier: string, password: string): Promise<ApiLoginResponse> {
+  const trimmed = identifier.trim();
+  const body: Record<string, string> = {
+    password,
+    deviceId: getOrCreateDeviceId(),
+    deviceName: guessDeviceName(),
+  };
+  if (trimmed.includes("@")) {
+    body.email = trimmed.toLowerCase();
+  } else {
+    body.phone = trimmed.replace(/\D+/g, "");
+  }
   const data = await apiRequest<ApiLoginResponse>("/api/auth/login.php", {
     method: "POST",
-    body: {
-      email,
-      password,
-      deviceId: getOrCreateDeviceId(),
-      deviceName: guessDeviceName(),
-    },
+    body,
     auth: false,
   });
   persistAuthSecrets({

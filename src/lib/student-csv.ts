@@ -448,6 +448,34 @@ export function normalizeClassLabelKey(className: string): string {
     .replace(/\s+/g, " ");
 }
 
+/** Class tier labels where this staff member is the class teacher. */
+export function assignedClassNamesForStaff(
+  classes: Array<
+    Pick<ClassConfig, "className" | "grade" | "section" | "classTeacherId">
+  >,
+  staffId: string,
+): string[] {
+  const id = staffId.trim();
+  if (!id) return [];
+  const names: string[] = [];
+  for (const row of classes) {
+    if ((row.classTeacherId ?? "").trim() !== id) continue;
+    const name = (row.className || composeClassName(row.grade, row.section)).trim();
+    if (name) names.push(name);
+  }
+  return names;
+}
+
+export function studentInAssignedClasses(
+  studentCls: string,
+  assignedClassNames: string[],
+): boolean {
+  if (!assignedClassNames.length) return false;
+  const key = normalizeClassLabelKey(studentCls);
+  if (!key) return false;
+  return assignedClassNames.some((name) => normalizeClassLabelKey(name) === key);
+}
+
 export function findMissingClassTiers(
   classes: ClassConfig[],
   enrolledClassLabels: string[],

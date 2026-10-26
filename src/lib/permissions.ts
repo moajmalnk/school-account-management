@@ -3,23 +3,39 @@
 export const PERMISSION_KEYS = [
   "dashboard",
   "students",
+  "attendance",
   "staff",
-  "settings",
+  "parents",
+  "academics",
+  "support",
   "finance.overview",
   "finance.receive",
   "finance.make",
-  "finance.analytics",
-  "finance.ledger",
-  "finance.pl",
-  "finance.balance",
+  "finance.transfer",
   "finance.fees_report",
+  "finance.concession",
   "finance.salary",
   "finance.daybook",
+  "finance.analytics",
+  "finance.ledger",
+  "finance.journals",
+  "finance.trial",
+  "finance.pl",
+  "finance.balance",
   "finance.reconciliation",
+  "finance.cashflow",
+  "finance.vehicle",
+  "finance.aging",
+  "finance.heads",
+  "settings",
+  "settings.branches",
+  "settings.classes",
+  "settings.leave",
   "settings.fees",
+  "settings.transport",
   "settings.users",
-  "parents",
-  "academics",
+  "settings.system",
+  "settings.subscription",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -30,6 +46,25 @@ export const FINANCE_PERMISSION_KEYS = PERMISSION_KEYS.filter((k) =>
   k.startsWith("finance."),
 ) as PermissionKey[];
 
+/** Older grants that still unlock a newer permission key. */
+const PERMISSION_FALLBACKS: Partial<Record<PermissionKey, readonly PermissionKey[]>> = {
+  attendance: ["students"],
+  "finance.transfer": ["finance.ledger"],
+  "finance.journals": ["finance.ledger"],
+  "finance.trial": ["finance.ledger"],
+  "finance.concession": ["finance.fees_report"],
+  "finance.cashflow": ["finance.pl"],
+  "finance.vehicle": ["finance.fees_report"],
+  "finance.aging": ["finance.fees_report"],
+  "finance.heads": ["finance.fees_report"],
+  "settings.branches": ["settings"],
+  "settings.classes": ["settings"],
+  "settings.leave": ["settings"],
+  "settings.transport": ["settings"],
+  "settings.system": ["settings"],
+  "settings.subscription": ["settings"],
+};
+
 export const PERMISSION_GROUPS: {
   id: string;
   label: string;
@@ -39,48 +74,97 @@ export const PERMISSION_GROUPS: {
   {
     id: "workspace",
     label: "Workspace",
-    description: "Core school modules",
-    keys: ["dashboard", "students", "staff", "parents", "academics"],
+    description: "Primary school modules",
+    keys: [
+      "dashboard",
+      "students",
+      "attendance",
+      "staff",
+      "parents",
+      "academics",
+      "support",
+    ],
   },
   {
     id: "finance",
     label: "Finance",
-    description: "Collections, payments & reports",
+    description: "Payments, books & reports",
     keys: [...FINANCE_PERMISSION_KEYS],
   },
   {
     id: "administration",
     label: "Administration",
-    description: "Settings and team access",
-    keys: ["settings", "settings.fees", "settings.users"],
+    description: "Settings tabs and team access",
+    keys: [
+      "settings",
+      "settings.branches",
+      "settings.classes",
+      "settings.leave",
+      "settings.fees",
+      "settings.transport",
+      "settings.users",
+      "settings.system",
+      "settings.subscription",
+    ],
   },
 ];
 
 export const PERMISSION_LABELS: Record<PermissionKey, string> = {
-  dashboard: "Dashboard",
+  dashboard: "Home",
   students: "Students",
+  attendance: "Attendance",
   staff: "Staff",
-  settings: "Settings hub",
+  parents: "Parents app",
+  academics: "Academics / exams",
+  support: "Help & support",
   "finance.overview": "Finance overview",
   "finance.receive": "Receive payment",
   "finance.make": "Make payment",
-  "finance.analytics": "Analytics",
-  "finance.ledger": "General ledger",
-  "finance.pl": "Profit & loss",
-  "finance.balance": "Balance sheet",
+  "finance.transfer": "Transfer money",
   "finance.fees_report": "Fees report",
+  "finance.concession": "Concession report",
   "finance.salary": "Salary report",
   "finance.daybook": "Day book",
+  "finance.analytics": "Analytics",
+  "finance.ledger": "Ledger",
+  "finance.journals": "Journals",
+  "finance.trial": "Trial balance",
+  "finance.pl": "Profit & loss",
+  "finance.balance": "Balance sheet",
   "finance.reconciliation": "Bank reconciliation",
-  "settings.fees": "Fee categories",
+  "finance.cashflow": "Cash flow",
+  "finance.vehicle": "Vehicle fees",
+  "finance.aging": "Fee aging",
+  "finance.heads": "Fee heads",
+  settings: "School details",
+  "settings.branches": "Branches",
+  "settings.classes": "Class Tier",
+  "settings.leave": "Leave",
+  "settings.fees": "Fee Category",
+  "settings.transport": "Bus Point",
   "settings.users": "Team users",
-  parents: "Parents",
-  academics: "Academics",
+  "settings.system": "System",
+  "settings.subscription": "Subscription",
 };
 
 export const ALL_PERMISSIONS: PermissionSet = ["*"];
 
-export const FINANCE_ONLY_PRESET: PermissionKey[] = [...FINANCE_PERMISSION_KEYS, "settings.fees"];
+export const FINANCE_ONLY_PRESET: PermissionKey[] = [
+  ...FINANCE_PERMISSION_KEYS,
+  "settings.fees",
+  "settings.transport",
+];
+
+/** Default module access when Login as is used on a staff profile with no team user linked. */
+export const STAFF_LOGIN_AS_PRESET: PermissionKey[] = [
+  "dashboard",
+  "students",
+  "attendance",
+  "staff",
+  "parents",
+  "academics",
+  "support",
+];
 
 export function isPermissionKey(value: unknown): value is PermissionKey {
   return typeof value === "string" && (PERMISSION_KEYS as readonly string[]).includes(value);
@@ -103,7 +187,10 @@ export function hasPermission(
 ): boolean {
   if (!permissions?.length) return false;
   if ((permissions as string[]).includes("*")) return true;
-  return (permissions as PermissionKey[]).includes(key);
+  const keys = permissions as PermissionKey[];
+  if (keys.includes(key)) return true;
+  const fallbacks = PERMISSION_FALLBACKS[key];
+  return Boolean(fallbacks?.some((alias) => keys.includes(alias)));
 }
 
 export function hasAnyFinance(permissions: PermissionSet | undefined | null): boolean {
@@ -268,6 +355,23 @@ export function planAllowsModule(
   return Boolean(resolved[module]);
 }
 
+const SETTINGS_TAB_PERMISSION: Partial<Record<SettingsTabId, PermissionKey>> = {
+  school: "settings",
+  branches: "settings.branches",
+  classes: "settings.classes",
+  departments: "settings.classes",
+  roles: "settings.classes",
+  leave: "settings.leave",
+  fees: "settings.fees",
+  vehicles: "settings.transport",
+  transport: "settings.transport",
+  users: "settings.users",
+  system: "settings.system",
+  subscription: "settings.subscription",
+  support: "support",
+  academics: "academics",
+};
+
 export function canAccessSettingsTab(
   permissions: PermissionSet | undefined | null,
   tab: SettingsTabId,
@@ -276,31 +380,30 @@ export function canAccessSettingsTab(
   if (!planAllowsSettingsTab(flags, tab)) return false;
   if (tab === "users" && !planAllowsExtraUsers(flags)) return false;
   if (hasFullAccess(permissions)) return true;
-  if (tab === "users") {
-    return hasPermission(permissions, "settings.users") || hasPermission(permissions, "settings");
-  }
-  if (tab === "fees") {
-    return hasPermission(permissions, "settings.fees") || hasPermission(permissions, "settings");
-  }
   if (tab === "academics") {
     return (
+      hasPermission(permissions, "academics") ||
       hasPermission(permissions, "settings") ||
-      hasPermission(permissions, "students") ||
-      hasPermission(permissions, "academics")
+      hasPermission(permissions, "students")
     );
   }
-  if (tab === "subscription") {
-    return canAccessSettingsModule(permissions);
+  if (tab === "support") {
+    return (
+      hasPermission(permissions, "support") ||
+      hasPermission(permissions, "settings") ||
+      canAccessSettingsModule(permissions)
+    );
   }
+  const key = SETTINGS_TAB_PERMISSION[tab];
+  if (key) return hasPermission(permissions, key);
   return hasPermission(permissions, "settings");
 }
 
 export function canAccessSettingsModule(permissions: PermissionSet | undefined | null): boolean {
   if (hasFullAccess(permissions)) return true;
-  return (
-    hasPermission(permissions, "settings") ||
-    hasPermission(permissions, "settings.fees") ||
-    hasPermission(permissions, "settings.users")
+  return PERMISSION_KEYS.some(
+    (key) =>
+      (key === "settings" || key.startsWith("settings.")) && hasPermission(permissions, key),
   );
 }
 
@@ -330,23 +433,23 @@ const FINANCE_VIEW_PERMISSION: Record<FinanceViewKey, PermissionKey> = {
   overview: "finance.overview",
   receive: "finance.receive",
   make: "finance.make",
-  transfer: "finance.ledger",
-  transfers: "finance.ledger",
+  transfer: "finance.transfer",
+  transfers: "finance.transfer",
   analytics: "finance.analytics",
   ledger: "finance.ledger",
-  journals: "finance.ledger",
-  trial: "finance.ledger",
+  journals: "finance.journals",
+  trial: "finance.trial",
   pl: "finance.pl",
   balance: "finance.balance",
   fees: "finance.fees_report",
-  concession: "finance.fees_report",
+  concession: "finance.concession",
   salary: "finance.salary",
   daybook: "finance.daybook",
   reconciliation: "finance.reconciliation",
-  cashflow: "finance.pl",
-  vehicle: "finance.fees_report",
-  aging: "finance.fees_report",
-  heads: "finance.fees_report",
+  cashflow: "finance.cashflow",
+  vehicle: "finance.vehicle",
+  aging: "finance.aging",
+  heads: "finance.heads",
 };
 
 export function canAccessFinanceView(
@@ -356,15 +459,28 @@ export function canAccessFinanceView(
   return hasPermission(permissions, FINANCE_VIEW_PERMISSION[view]);
 }
 
-export function firstAllowedTenantPath(permissions: PermissionSet | undefined | null): string {
+export function firstAllowedTenantPath(
+  permissions: PermissionSet | undefined | null,
+  staffId?: string | null,
+): string {
+  const selfStaffPath =
+    typeof staffId === "string" && staffId.trim()
+      ? `/tenant/staff?id=${encodeURIComponent(staffId.trim())}`
+      : null;
+  // Staff Login as should open that person's profile, not the full directory.
+  if (selfStaffPath && hasPermission(permissions, "staff")) {
+    return selfStaffPath;
+  }
   if (hasPermission(permissions, "dashboard") || hasFullAccess(permissions)) {
     return "/tenant/dashboard";
   }
   if (hasPermission(permissions, "students")) return "/tenant/students";
-  if (hasPermission(permissions, "staff")) return "/tenant/staff";
+  if (hasPermission(permissions, "attendance")) return "/tenant/attendance";
+  if (hasPermission(permissions, "staff")) return selfStaffPath || "/tenant/staff";
   if (hasAnyFinance(permissions)) return "/tenant/finance";
+  if (hasPermission(permissions, "support")) return "/tenant/support";
   if (canAccessSettingsModule(permissions)) return "/tenant/settings";
-  return "/tenant/dashboard";
+  return selfStaffPath || "/tenant/dashboard";
 }
 
 export function summarizePermissions(permissions: PermissionSet): string {

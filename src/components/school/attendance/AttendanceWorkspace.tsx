@@ -70,6 +70,11 @@ import {
 import { formatDownloadFilename } from "@/lib/download-names";
 import { downloadBlobFile } from "@/lib/finance-export";
 import { buildXlsxBlob } from "@/lib/xlsx-workbook";
+import { sessionStaffClassScopeId, useAuth } from "@/lib/auth";
+import {
+  assignedClassNamesForStaff,
+  studentInAssignedClasses,
+} from "@/lib/student-csv";
 import { useTenantStore } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
 import { loadWhatsAppTemplates } from "@/lib/whatsapp-messages";
@@ -190,8 +195,31 @@ function Donut({ percent }: { percent: number }) {
 }
 
 function StudentAttendanceBoard() {
-  const { schoolDetails, classes: classConfigs, students } = useTenantStore();
+  const { schoolDetails, classes: allClassConfigs, students: allStudents } = useTenantStore();
+  const { session } = useAuth();
   const schoolName = schoolDetails.name || "School";
+  const classScopeStaffId = sessionStaffClassScopeId(session);
+  const assignedClassNames = useMemo(
+    () =>
+      classScopeStaffId ? assignedClassNamesForStaff(allClassConfigs, classScopeStaffId) : [],
+    [allClassConfigs, classScopeStaffId],
+  );
+  const classConfigs = useMemo(() => {
+    if (!classScopeStaffId || assignedClassNames.length === 0) {
+      return classScopeStaffId ? [] : allClassConfigs;
+    }
+    return allClassConfigs.filter((c) =>
+      studentInAssignedClasses(
+        c.className || `${c.grade}${c.section ? ` - ${c.section}` : ""}`,
+        assignedClassNames,
+      ),
+    );
+  }, [allClassConfigs, classScopeStaffId, assignedClassNames]);
+  const students = useMemo(() => {
+    if (!classScopeStaffId) return allStudents;
+    if (assignedClassNames.length === 0) return [];
+    return allStudents.filter((s) => studentInAssignedClasses(s.cls, assignedClassNames));
+  }, [allStudents, classScopeStaffId, assignedClassNames]);
 
   const [date, setDate] = useState(todayYmd);
   const [summary, setSummary] = useState<AttendanceSummaryResponse | null>(null);
@@ -267,7 +295,13 @@ function StudentAttendanceBoard() {
           class: reportClass,
           division: reportDivision,
         });
-        setDayRoster(day.students);
+        const scoped =
+          classScopeStaffId && assignedClassNames.length > 0
+            ? day.students.filter((s) => studentInAssignedClasses(s.cls, assignedClassNames))
+            : classScopeStaffId
+              ? []
+              : day.students;
+        setDayRoster(scoped);
       } else {
         const bounds = monthBounds(date);
         const from = mode === "monthly" ? bounds.from : bounds.from;

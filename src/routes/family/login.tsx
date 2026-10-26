@@ -1,7 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { FamilyLogin } from "@/components/family/FamilyLogin";
-
+/** Parent login lives on the global `/login` page (email or phone). */
 export const Route = createFileRoute("/family/login")({
-  component: FamilyLogin,
+  beforeLoad: () => {
+    throw redirect({ to: "/login" });
+  },
+  component: () => null,
 });

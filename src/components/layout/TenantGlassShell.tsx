@@ -675,11 +675,19 @@ function navAllowed(to: string, session: ReturnType<typeof useAuth>["session"]):
   if (to.startsWith("/tenant/students")) return sessionHasPermission(session, "students");
   if (to.startsWith("/tenant/attendance")) {
     return (
-      sessionHasPermission(session, "students") && planAllowsStudentAttendance(session?.planFlags)
+      planAllowsStudentAttendance(session?.planFlags) &&
+      (sessionHasPermission(session, "attendance") || sessionHasPermission(session, "students"))
     );
   }
   if (to.startsWith("/tenant/staff")) return sessionHasPermission(session, "staff");
   if (to.startsWith("/tenant/finance")) return sessionHasAnyFinance(session);
+  if (to.startsWith("/tenant/support")) {
+    return (
+      sessionHasPermission(session, "support") ||
+      sessionHasPermission(session, "dashboard") ||
+      sessionCanAccessSettings(session)
+    );
+  }
   if (to.startsWith("/tenant/settings")) return sessionCanAccessSettings(session);
   return true;
 }

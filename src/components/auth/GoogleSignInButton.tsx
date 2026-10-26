@@ -19,7 +19,7 @@ export function GoogleSignInButton({ disabled }: Props) {
           console.error(err);
         }
       }}
-      className="flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-[#E8EAED] bg-white text-[13px] font-medium text-[#1F1F1F] transition-colors hover:bg-[#F8F9FA] disabled:opacity-55"
+      className="flex h-12 w-full items-center justify-center gap-2.5 rounded-2xl border border-[#E5E7EB] bg-white text-[13.5px] font-medium text-[#1F1F1F] transition-colors hover:border-[#D1D5DB] hover:bg-[#FAFBFC] disabled:opacity-55"
     >
       <GoogleGlyph className="h-4 w-4 shrink-0" />
       Continue with Google

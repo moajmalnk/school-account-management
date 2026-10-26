@@ -33,7 +33,7 @@ function FamilyGate() {
 
   useEffect(() => {
     if (!ready || bare) return;
-    if (!signedIn) navigate({ href: "/family/login", replace: true });
+    if (!signedIn) navigate({ href: "/login", replace: true });
   }, [ready, signedIn, bare, navigate]);
 
   if (bare) return <Outlet />;

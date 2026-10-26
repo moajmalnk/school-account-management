@@ -33,8 +33,8 @@ import { Label } from "@/components/ui/label";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import type { Staff, StaffDocument, StaffDocumentAttachment, TenantUser } from "@/lib/tenant-store";
-import { apiDeleteStaff, apiGetStaff, apiSetStaffShareToken, apiUpsertStaff } from "@/lib/api/records";
-import { getApiToken } from "@/lib/api/client";
+import { apiGetStaff, apiSetStaffShareToken, apiUpsertStaff } from "@/lib/api/records";
+import { apiRequest, getApiToken } from "@/lib/api/client";
 import {
   DEFAULT_STAFF_DOCUMENTS,
   normalizeTenantUser,
@@ -53,19 +53,9 @@ import {
   isSalaryMonthSettled,
   type StaffSalaryHistoryEntry,
 } from "@/lib/tenant-store";
-import { sessionHasPermission, useAuth } from "@/lib/auth";
-import {
-  ALL_PERMISSIONS,
-  FINANCE_ONLY_PRESET,
-  PERMISSION_GROUPS,
-  PERMISSION_LABELS,
-  hasFullAccess,
-  summarizePermissions,
-  type PermissionKey,
-  type PermissionSet,
-} from "@/lib/permissions";
-import { Checkbox } from "@/components/ui/checkbox";
-import { isRecordActive, ProfileAccountActions } from "@/components/school/ProfileAccountActions";
+import { useAuth } from "@/lib/auth";
+import { STAFF_LOGIN_AS_PRESET } from "@/lib/permissions";
+import { isRecordActive } from "@/components/school/ProfileAccountActions";
 import { ShareStaffCollectDialog } from "@/components/school/ShareStaffCollectDialog";
 import {
   ProfileDetailTabs,
@@ -305,20 +295,44 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/staff" });
   const { session } = useAuth();
-  const {
-    setStaff,
-    activeDepartments: departments,
-    activeRoles: roles,
-    tenantUsers,
-    setTenantUsers,
-    schoolDetails,
-    activeBranchId,
-  } = useTenantStore();
+  const { setStaff, schoolDetails, tenantUsers, setTenantUsers, activeBranchId } = useTenantStore();
   const schoolName = schoolDetails.name || session?.tenantName || "School";
   const [shareOpen, setShareOpen] = useState(false);
   const [shareToken, setShareToken] = useState(staff.shareToken ?? "");
   const [openingShare, setOpeningShare] = useState(false);
+  const [loginAsBusy, setLoginAsBusy] = useState(false);
   const collectGaps = useMemo(() => staffCollectGaps(staff), [staff]);
+  const linkedUser = useMemo(
+    () => tenantUsers.find((u) => u.staffId === staff.id && u.active) ?? null,
+    [tenantUsers, staff.id],
+  );
+  // Always show on staff profiles (including super-admin / school Preview sessions).
+  const showLoginAs = !(linkedUser && session?.userId && linkedUser.id === session.userId);
+
+  const openImpersonateHref = (href: string, label: string, description?: string) => {
+    setLoginAsBusy(true);
+    // Preview sessions keep the school JWT in this tab's sessionStorage — stay here.
+    if (session?.impersonated) {
+      toast.success(label, { description: description ?? "Switching preview in this tab" });
+      window.location.assign(href);
+      return;
+    }
+    const tab = window.open(href, "_blank");
+    if (tab) {
+      try {
+        tab.opener = null;
+      } catch {
+        // ignore
+      }
+      toast.success(label, {
+        description: description ?? "New tab · your admin session stays here",
+      });
+      setLoginAsBusy(false);
+      return;
+    }
+    toast.message(label, { description: "Pop-ups blocked · continuing in this tab" });
+    window.location.assign(href);
+  };
 
   useEffect(() => {
     setShareToken(staff.shareToken ?? "");
@@ -344,6 +358,79 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only refetch on id change
   }, [staff.id, setStaff]);
 
+  // Keep Settings → Users links fresh so Login as appears when this staff is linked.
+  useEffect(() => {
+    if (!getApiToken()) return;
+    let cancelled = false;
+    void apiRequest<unknown[]>("/api/settings/users.php")
+      .then((list) => {
+        if (cancelled || !Array.isArray(list)) return;
+        const next = list
+          .filter(
+            (row): row is Partial<TenantUser> & Pick<TenantUser, "id" | "email"> =>
+              Boolean(
+                row &&
+                  typeof row === "object" &&
+                  typeof (row as { id?: unknown }).id === "string" &&
+                  typeof (row as { email?: unknown }).email === "string",
+              ),
+          )
+          .map((row) => normalizeTenantUser(row));
+        setTenantUsers(next);
+      })
+      .catch(() => {
+        /* keep cached users */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [staff.id, setTenantUsers]);
+
+  const openStaffLoginAs = () => {
+    const user =
+      linkedUser ??
+      tenantUsers.find((u) => u.staffId === staff.id) ??
+      null;
+    if (user) {
+      if (!user.active) {
+        toast.error("This workspace login is inactive", {
+          description: "Activate it under Settings → Users, then try Login as again.",
+        });
+        return;
+      }
+      if (user.id === session?.userId) {
+        toast.message("You are already signed in as this staff member");
+        return;
+      }
+      const branches = (user.branchIds ?? []).filter(Boolean).join(",");
+      const qs = new URLSearchParams({ user: user.id });
+      if (branches) qs.set("branches", branches);
+      if (session?.tenantId) qs.set("workspace", session.tenantId);
+      if (session?.tenantName) qs.set("workspaceName", session.tenantName);
+      openImpersonateHref(
+        `/impersonate?${qs.toString()}`,
+        `Opening workspace as ${user.displayName || staff.name}`,
+      );
+      return;
+    }
+
+    // No team user linked yet — open a staff preview with standard classroom modules.
+    const qs = new URLSearchParams({
+      perms: STAFF_LOGIN_AS_PRESET.join(","),
+      name: staff.name,
+      staff: staff.id,
+      email: `staff-${staff.id.toLowerCase()}@preview.feezo.app`,
+    });
+    if (activeBranchId) qs.set("branches", activeBranchId);
+    if (session?.tenantId) qs.set("workspace", session.tenantId);
+    if (session?.tenantName) qs.set("workspaceName", session.tenantName);
+    openImpersonateHref(
+      `/impersonate?${qs.toString()}`,
+      `Opening workspace as ${staff.name}`,
+      "Standard staff modules · link a team user in Settings → Users for custom access",
+    );
+  };
+
   const syncStaff = async (updated: Staff) => {
     setStaff((prev) => prev.map((s) => (s.id === staff.id ? updated : s)));
     try {
@@ -366,117 +453,6 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
     }
   };
 
-  const canManageUsers = sessionHasPermission(session, "settings.users");
-  const linkedUser = useMemo(
-    () => tenantUsers.find((u) => u.staffId === staff.id) ?? null,
-    [tenantUsers, staff.id],
-  );
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [pendingRemoveLogin, setPendingRemoveLogin] = useState(false);
-  const [loginForm, setLoginForm] = useState({
-    email: "",
-    password: "",
-    active: true,
-    allFunctions: false,
-    permissions: [] as PermissionKey[],
-  });
-
-  const openLoginDialog = () => {
-    const matchedRole = roles.find((r) => r.title === staff.role);
-    if (linkedUser) {
-      const all = hasFullAccess(linkedUser.permissions);
-      setLoginForm({
-        email: linkedUser.email,
-        password: linkedUser.password,
-        active: linkedUser.active,
-        allFunctions: all,
-        permissions: all ? [] : ([...linkedUser.permissions] as PermissionKey[]),
-      });
-    } else {
-      setLoginForm({
-        email: "",
-        password: "",
-        active: true,
-        allFunctions: false,
-        permissions: [...FINANCE_ONLY_PRESET],
-      });
-    }
-    void matchedRole;
-    setLoginOpen(true);
-  };
-
-  const saveStaffLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = loginForm.email.trim().toLowerCase();
-    const password = loginForm.password;
-    if (!email.includes("@")) {
-      toast.error("Valid email is required");
-      return;
-    }
-    if (password.length < 4) {
-      toast.error("Password must be at least 4 characters");
-      return;
-    }
-    const permissions: PermissionSet = loginForm.allFunctions
-      ? ALL_PERMISSIONS
-      : loginForm.permissions;
-    if (!loginForm.allFunctions && loginForm.permissions.length === 0) {
-      toast.error("Assign at least one permission");
-      return;
-    }
-    const emailTaken = tenantUsers.some((u) => u.email === email && u.staffId !== staff.id);
-    if (emailTaken) {
-      toast.error("Email already used by another user");
-      return;
-    }
-    const matchedRole = roles.find((r) => r.title === staff.role);
-    const branchIds = activeBranchId ? [activeBranchId] : [];
-    if (linkedUser) {
-      setTenantUsers((prev) =>
-        prev.map((u) =>
-          u.id === linkedUser.id
-            ? normalizeTenantUser({
-                ...u,
-                email,
-                password,
-                displayName: staff.name,
-                roleId: matchedRole?.id,
-                staffId: staff.id,
-                permissions,
-                active: loginForm.active,
-                branchIds: u.branchIds.length > 0 ? u.branchIds : branchIds,
-              })
-            : u,
-        ),
-      );
-      toast.success("Workspace login updated", { description: email });
-    } else {
-      const next: TenantUser = normalizeTenantUser({
-        id: `USR-${Date.now().toString().slice(-6)}`,
-        email,
-        password,
-        displayName: staff.name,
-        roleId: matchedRole?.id,
-        staffId: staff.id,
-        permissions,
-        active: loginForm.active,
-        branchIds,
-        createdAt: new Date().toISOString(),
-      });
-      setTenantUsers((prev) => [next, ...prev]);
-      toast.success("Workspace login enabled", {
-        description: `${email} · sign in under School Admin tier`,
-      });
-    }
-    setLoginOpen(false);
-  };
-
-  const removeStaffLogin = () => {
-    if (!linkedUser) return;
-    setTenantUsers((prev) => prev.filter((u) => u.id !== linkedUser.id));
-    toast.error("Workspace login removed", { description: staff.name });
-    setPendingRemoveLogin(false);
-  };
   const activeTab: StaffProfileTabId = isStaffProfileTab(search.tab) ? search.tab : "profile";
   const setActiveTab = (tab: ProfileDetailTabId) => {
     if (!isStaffProfileTab(tab)) return;
@@ -822,26 +798,6 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
 
   const isActive = isRecordActive(staff.active);
 
-  const toggleActive = (nextActive: boolean) => {
-    const at = new Date().toISOString();
-    const eventType = nextActive ? ("reactivated" as const) : ("deactivated" as const);
-    const event = {
-      id: `EVT-${staff.id}-${Date.now().toString().slice(-6)}`,
-      type: eventType,
-      at,
-      note: nextActive ? "Account reactivated from archive" : "Account deactivated and archived",
-    };
-    const updated: Staff = {
-      ...staff,
-      active: nextActive,
-      statusHistory: [event, ...(staff.statusHistory ?? [])],
-    };
-    syncStaff(updated);
-    toast.success(nextActive ? `${staff.name} reactivated` : `${staff.name} deactivated`, {
-      description: `${staff.id} · ${formatStatusDateTime(at)}`,
-    });
-  };
-
   const openShare = () => {
     if (openingShare) return;
     setOpeningShare(true);
@@ -867,19 +823,6 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
       setShareToken(token);
       setShareOpen(true);
     })().finally(() => setOpeningShare(false));
-  };
-
-  const deleteStaff = () => {
-    setStaff((prev) =>
-      prev.map((s) => (s.id === staff.id ? { ...s, deletedAt: new Date().toISOString() } : s)),
-    );
-    void apiDeleteStaff(staff.id).catch((err) =>
-      toast.error("Could not move staff to recycle bin on server", {
-        description: err instanceof Error ? err.message : "Delete failed",
-      }),
-    );
-    toast.error(`${staff.name} moved to recycle bin`, { description: staff.id });
-    onBack();
   };
 
   return (
@@ -938,6 +881,27 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                 <ClipboardList className="h-4 w-4" />
               )}
               Collect
+            </button>
+            <button
+              type="button"
+              onClick={openStaffLoginAs}
+              disabled={loginAsBusy || !showLoginAs}
+              aria-label={`Login as ${staff.name}`}
+              title={
+                !showLoginAs
+                  ? "You are already signed in as this staff member"
+                  : linkedUser
+                    ? "Open the workspace as this staff member in a new tab"
+                    : "Opens Settings → Users if this staff has no linked login yet"
+              }
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-4 text-[13px] font-semibold text-[#0F766E] shadow-sm transition-colors hover:border-[#5EEAD4] hover:bg-[#CCFBF1] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loginAsBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ExternalLink className="h-4 w-4" />
+              )}
+              Login as
             </button>
             <button
               type="button"
@@ -1210,41 +1174,22 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                       {attendancePay.attendance.workingDays} payable days (
                       {Math.round(attendancePay.ratio * 100)}%)
                     </p>
-                    {currentMonthSettled ? (
-                      <div className="mt-3 space-y-2">
+                    <div className="mt-3 space-y-2">
+                      {currentMonthSettled ? (
                         <div className="inline-flex rounded-full bg-[#D1F2E1] px-2.5 py-1 text-[11px] font-semibold text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300">
                           Settled for {formatPayrollMonthLabel(payrollMonth)}
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-9 w-full rounded-full text-[12.5px] font-semibold"
-                          onClick={() => setActiveTab("payments")}
-                        >
-                          <Wallet className="mr-1.5 h-3.5 w-3.5" />
-                          View salary history
-                        </Button>
-                      </div>
-                    ) : (
+                      ) : null}
                       <Button
                         type="button"
-                        className="mt-3 h-9 w-full rounded-full bg-[#0F766E] text-[12.5px] font-semibold text-white hover:bg-[#0D9488]"
-                        onClick={() =>
-                          navigate({
-                            to: "/tenant/finance",
-                            search: {
-                              tab: "make",
-                              staffId: staff.id,
-                              amount: String(currentMonthOutstanding || attendancePay.payable),
-                              month: payrollMonth,
-                            },
-                          })
-                        }
+                        variant="outline"
+                        className="h-9 w-full rounded-full text-[12.5px] font-semibold"
+                        onClick={() => setActiveTab("payments")}
                       >
                         <Wallet className="mr-1.5 h-3.5 w-3.5" />
-                        Pay {formatMoney(currentMonthOutstanding || attendancePay.payable)}
+                        View salary history
                       </Button>
-                    )}
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -1671,28 +1616,6 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                   <Download className="mr-1.5 h-3.5 w-3.5" />
                   Download payroll report
                 </Button>
-                {!currentMonthSettled && payrollStatement.currentMonthPayable > 0 && (
-                  <Button
-                    type="button"
-                    className="h-9 w-full shrink-0 rounded-full bg-[#0F766E] px-4 text-[12.5px] font-semibold text-white hover:bg-[#0D9488] sm:w-auto"
-                    onClick={() =>
-                      navigate({
-                        to: "/tenant/finance",
-                        search: {
-                          tab: "make",
-                          staffId: staff.id,
-                          amount: String(
-                            currentMonthOutstanding || payrollStatement.currentMonthPayable,
-                          ),
-                          month: payrollMonth,
-                        },
-                      })
-                    }
-                  >
-                    <Wallet className="mr-1.5 h-3.5 w-3.5" />
-                    Pay outstanding
-                  </Button>
-                )}
               </div>
             </div>
 
@@ -1812,26 +1735,6 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                           </div>
                         </div>
                       </div>
-                      {row.outstanding > 0 && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="mt-3 h-8 w-full rounded-full bg-[#0F766E] text-[11px] font-semibold text-white hover:bg-[#0D9488]"
-                          onClick={() =>
-                            navigate({
-                              to: "/tenant/finance",
-                              search: {
-                                tab: "make",
-                                staffId: staff.id,
-                                amount: String(row.outstanding),
-                                month: row.month,
-                              },
-                            })
-                          }
-                        >
-                          Pay {formatMoney(row.outstanding)}
-                        </Button>
-                      )}
                     </article>
                   ))}
                 </div>
@@ -1840,22 +1743,16 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                   <table className="w-full min-w-[640px] text-left text-[12.5px]">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
-                        {[
-                          "Month",
-                          "Attendance",
-                          "Payable",
-                          "Paid",
-                          "Outstanding",
-                          "Status",
-                          "",
-                        ].map((header) => (
+                        {["Month", "Attendance", "Payable", "Paid", "Outstanding", "Status"].map(
+                          (header) => (
                           <th
-                            key={header || "actions"}
+                            key={header}
                             className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
                           >
                             {header}
                           </th>
-                        ))}
+                          ),
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -1890,28 +1787,6 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                           </td>
                           <td className="px-3 py-3">
                             <SalaryStatusBadge status={row.status} />
-                          </td>
-                          <td className="px-3 py-3 text-right">
-                            {row.outstanding > 0 ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="h-7 rounded-full bg-[#0F766E] px-2.5 text-[11px] font-semibold text-white hover:bg-[#0D9488]"
-                                onClick={() =>
-                                  navigate({
-                                    to: "/tenant/finance",
-                                    search: {
-                                      tab: "make",
-                                      staffId: staff.id,
-                                      amount: String(row.outstanding),
-                                      month: row.month,
-                                    },
-                                  })
-                                }
-                              >
-                                Pay
-                              </Button>
-                            ) : null}
                           </td>
                         </tr>
                       ))}
@@ -2021,75 +1896,6 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
         </ProfileTabPanel>
       </ProfileDetailTabs>
 
-      {canManageUsers && (
-        <section className={CARD_FRAME}>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-black dark:text-zinc-100">
-                Workspace Login
-              </h2>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-black/55 dark:text-zinc-400">
-                Allow this staff member to sign in with limited module permissions.
-              </p>
-              {linkedUser ? (
-                <div className="mt-2 text-[12px] text-black/60 dark:text-zinc-400">
-                  <div className="font-medium text-black dark:text-zinc-100">
-                    {linkedUser.email}
-                  </div>
-                  <div className="mt-0.5">
-                    {linkedUser.active ? "Active" : "Inactive"} ·{" "}
-                    {summarizePermissions(linkedUser.permissions)}
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-2 text-[12px] text-black/45 dark:text-zinc-500">
-                  No login enabled yet
-                </p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full dark:border-white/20 dark:bg-transparent dark:text-zinc-100 dark:hover:bg-white/10"
-                onClick={openLoginDialog}
-              >
-                {linkedUser ? "Edit login" : "Enable login"}
-              </Button>
-              {linkedUser && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-full dark:border-white/20 dark:bg-transparent dark:text-zinc-100 dark:hover:bg-white/10"
-                    onClick={() => navigate({ to: "/tenant/settings", search: { tab: "users" } })}
-                  >
-                    Manage in Users
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-full border-[#FECACA] text-[#EF4444] hover:bg-[#FEF2F2] hover:text-[#EF4444] dark:border-rose-400/45 dark:bg-transparent dark:text-rose-300 dark:hover:bg-rose-950/55 dark:hover:text-rose-200"
-                    onClick={() => setPendingRemoveLogin(true)}
-                  >
-                    Remove login
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-
-      <ProfileAccountActions
-        name={staff.name}
-        recordId={staff.id}
-        active={isActive}
-        entityLabel="staff member"
-        onToggleActive={toggleActive}
-        onDelete={deleteStaff}
-      />
-
       <Dialog
         open={pendingDeleteMonth !== null}
         onOpenChange={(open) => {
@@ -2120,152 +1926,6 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
               }}
             >
               Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {linkedUser ? "Edit workspace login" : "Enable workspace login"}
-            </DialogTitle>
-            <DialogDescription>
-              {staff.name} will sign in under the School Admin login tier with the email below.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={saveStaffLogin} className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={loginForm.email}
-                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                  placeholder="staff@school.edu"
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Password</Label>
-                <Input
-                  type="text"
-                  value={loginForm.password}
-                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                  placeholder="Min 4 characters"
-                />
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold"
-                onClick={() => setLoginForm((p) => ({ ...p, allFunctions: true, permissions: [] }))}
-              >
-                All functions
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold"
-                onClick={() =>
-                  setLoginForm((p) => ({
-                    ...p,
-                    allFunctions: false,
-                    permissions: [...FINANCE_ONLY_PRESET],
-                  }))
-                }
-              >
-                Finance only
-              </button>
-            </div>
-            <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3">
-              {PERMISSION_GROUPS.map((group) => (
-                <div key={group.id}>
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    {group.label}
-                  </div>
-                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                    {group.keys.map((key) => {
-                      const checked = loginForm.allFunctions || loginForm.permissions.includes(key);
-                      return (
-                        <label
-                          key={key}
-                          className="flex cursor-pointer items-center gap-2 text-[12px]"
-                        >
-                          <Checkbox
-                            checked={checked}
-                            disabled={loginForm.allFunctions}
-                            onCheckedChange={(v) => {
-                              setLoginForm((prev) => {
-                                const next = new Set(prev.permissions);
-                                if (v === true) next.add(key);
-                                else next.delete(key);
-                                return {
-                                  ...prev,
-                                  allFunctions: false,
-                                  permissions: Array.from(next),
-                                };
-                              });
-                            }}
-                          />
-                          {PERMISSION_LABELS[key]}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <label className="flex cursor-pointer items-center gap-2 text-[13px]">
-              <Checkbox
-                checked={loginForm.active}
-                onCheckedChange={(v) => setLoginForm({ ...loginForm, active: v === true })}
-              />
-              Active
-            </label>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setLoginOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-              >
-                Save login
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={pendingRemoveLogin}
-        onOpenChange={(next) => {
-          if (!next) setPendingRemoveLogin(false);
-        }}
-      >
-        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6 dark:border-white/10 dark:bg-zinc-900">
-          <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black dark:text-zinc-100">
-              Remove workspace login
-            </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
-              {linkedUser
-                ? `Remove login for ${staff.name} (${linkedUser.email})? They will no longer be able to sign in.`
-                : `Remove workspace login for ${staff.name}?`}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-5 flex-row justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setPendingRemoveLogin(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
-              onClick={removeStaffLogin}
-            >
-              Remove login
             </Button>
           </DialogFooter>
         </DialogContent>

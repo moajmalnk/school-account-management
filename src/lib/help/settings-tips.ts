@@ -352,8 +352,9 @@ export const USER_MODULES_TIP: InfoTipContent = {
   title: "Module access",
   points: [
     "All functions: every module in the workspace.",
-    "Finance only: all finance screens and Fee categories.",
-    "Settings hub opens School, Branches, Class Tier, Leave, Bus Point and System. Fee categories and Team users can be given on their own.",
+    "Finance only: payments, books, reports, Fee Category and Bus Point.",
+    "Workspace covers Home, Students, Attendance, Staff, Parents app, Academics and Help & support.",
+    "Administration can grant School details, Branches, Class Tier, Leave, Fee Category, Bus Point, Team users, System and Subscription one by one.",
     "Tip: after saving, use Login as to confirm what the user can see.",
   ],
 };

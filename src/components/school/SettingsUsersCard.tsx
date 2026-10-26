@@ -19,6 +19,7 @@ import { OrganicCard } from "@/components/ui/organic-card";
 import { ApiError } from "@/lib/api/client";
 import { apiDeleteTenantUser, apiUpsertTenantUser } from "@/lib/api/settings";
 import { requestSupportPasswordReset } from "@/lib/api/support";
+import { defaultPassword } from "@/lib/default-password";
 import {
   USER_ACTIVE_TIP,
   USER_CAMPUSES_TIP,
@@ -284,7 +285,7 @@ export function SettingsUsersCard({
     e.preventDefault();
     const displayName = form.displayName.trim();
     const email = form.email.trim().toLowerCase();
-    const password = form.password;
+    let password = form.password;
     if (!displayName) {
       toast.error("Display name is required");
       return;
@@ -293,12 +294,18 @@ export function SettingsUsersCard({
       toast.error("Valid email is required");
       return;
     }
-    if (!editingId && (!password || password.length < 8)) {
-      toast.error("Password must be at least 8 characters");
+    if (!editingId && !password && form.staffId) {
+      const linked = liveStaff.find((s) => s.id === form.staffId);
+      if (linked?.phone) {
+        password = defaultPassword(displayName || linked.name, linked.phone);
+      }
+    }
+    if (!editingId && (!password || password.length < 7)) {
+      toast.error("Password must be at least 7 characters (or link staff for the default)");
       return;
     }
-    if (editingId && password && password.length < 8) {
-      toast.error("New password must be at least 8 characters");
+    if (editingId && password && password.length < 7) {
+      toast.error("New password must be at least 7 characters");
       return;
     }
     const permissions: PermissionSet = form.allFunctions ? ALL_PERMISSIONS : form.permissions;
@@ -640,10 +647,13 @@ export function SettingsUsersCard({
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
                     placeholder={
                       editingId
-                        ? "Leave blank to keep current · or min 8 chars"
-                        : "Min 8 characters"
+                        ? "Leave blank to keep current · or name+phone default"
+                        : "Min 7 · or link staff for ani#### default"
                     }
                   />
+                  <p className="text-[11px] text-black/45">
+                    Default formula: first 3 letters of first name + last 4 of phone (e.g. ani0004).
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-1">
@@ -674,7 +684,23 @@ export function SettingsUsersCard({
                   </Label>
                   <Select
                     value={form.staffId || "__none__"}
-                    onValueChange={(v) => setForm({ ...form, staffId: v === "__none__" ? "" : v })}
+                    onValueChange={(v) => {
+                      if (v === "__none__") {
+                        setForm({ ...form, staffId: "" });
+                        return;
+                      }
+                      const linked = liveStaff.find((s) => s.id === v);
+                      const name = form.displayName.trim() || linked?.name || "";
+                      const phone = linked?.phone ?? "";
+                      const nextPass =
+                        !editingId && phone && name ? defaultPassword(name, phone) : form.password;
+                      setForm({
+                        ...form,
+                        staffId: v,
+                        displayName: form.displayName.trim() ? form.displayName : linked?.name || form.displayName,
+                        password: nextPass,
+                      });
+                    }}
                   >
                     <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
                       <SelectValue placeholder="Optional staff" />
