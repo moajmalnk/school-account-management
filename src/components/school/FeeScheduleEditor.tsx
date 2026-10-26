@@ -20,7 +20,12 @@ import {
   type ClassBillingCycle,
   type ClassFeeAmountMode,
   type ClassFeeLine,
+  type FeeTerm,
 } from "@/lib/tenant-store";
+import {
+  cappedInstallmentCount,
+  fillDueDatesFromFirst,
+} from "@/lib/fee-schedule-actions";
 import { formatAmount, formatMoney, moneyColumnLabel } from "@/lib/money";
 
 export type FeeScheduleDraft = {
@@ -126,6 +131,9 @@ type FeeScheduleEditorProps = {
   onChange: (next: FeeScheduleDraft) => void;
   amountLabel?: string;
   hints?: FeeScheduleHints;
+  /** When set, installment defaults follow capped Fee Category periods. */
+  feeTerms?: FeeTerm[];
+  feeKind?: "tuition" | "vehicle";
 };
 
 export function FeeScheduleEditor({
@@ -133,10 +141,13 @@ export function FeeScheduleEditor({
   onChange,
   amountLabel = moneyColumnLabel("Amount each"),
   hints,
+  feeTerms = [],
+  feeKind = "tuition",
 }: FeeScheduleEditorProps) {
   const tip = (key: keyof FeeScheduleHints) =>
     hints?.[key] ? <InfoTip content={hints[key]} className="-my-1 ml-1" /> : null;
-  const defaultCount = (cycle: FeeScheduleDraft["billingCycle"]) => (cycle === "Term" ? 4 : 10);
+  const defaultCount = (cycle: FeeScheduleDraft["billingCycle"]) =>
+    cappedInstallmentCount(cycle, feeTerms, feeKind);
 
   const rebuildRows = (
     prev: FeeScheduleDraft,
@@ -463,7 +474,21 @@ export function FeeScheduleEditor({
                     )}
                     <DatePicker
                       value={row.dueDate || undefined}
-                      onChange={(dueDate) => patchInstallment(index, { dueDate: dueDate || "" })}
+                      onChange={(dueDate) => {
+                        const nextDate = dueDate || "";
+                        if (index === 0 && nextDate) {
+                          const filled = fillDueDatesFromFirst(
+                            value.installments.map((r, i) =>
+                              i === 0 ? { ...r, dueDate: nextDate } : r,
+                            ),
+                            value.billingCycle,
+                            true,
+                          );
+                          onChange({ ...value, installments: filled });
+                          return;
+                        }
+                        patchInstallment(index, { dueDate: nextDate });
+                      }}
                       placeholder="Due date"
                       className="h-8"
                     />

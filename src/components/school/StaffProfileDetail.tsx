@@ -16,7 +16,6 @@ import {
   Plus,
   Download,
   CheckCircle2,
-  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,9 +52,9 @@ import {
   isSalaryMonthSettled,
   type StaffSalaryHistoryEntry,
 } from "@/lib/tenant-store";
-import { useAuth } from "@/lib/auth";
+import { isStaffSelfPreviewSession, useAuth } from "@/lib/auth";
 import { STAFF_LOGIN_AS_PRESET } from "@/lib/permissions";
-import { isRecordActive } from "@/components/school/ProfileAccountActions";
+import { isEmbeddedWebView } from "@/lib/native-download";
 import { ShareStaffCollectDialog } from "@/components/school/ShareStaffCollectDialog";
 import {
   ProfileDetailTabs,
@@ -308,30 +307,40 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
   );
   // Always show on staff profiles (including super-admin / school Preview sessions).
   const showLoginAs = !(linkedUser && session?.userId && linkedUser.id === session.userId);
+  // Staff self / Login as preview — no school admin Collect / Pay / edit chrome.
+  const isOwnStaffView =
+    Boolean(session?.staffId) &&
+    session?.staffId === staff.id &&
+    (session?.role === "tenant_user" || isStaffSelfPreviewSession(session));
+  const showAdminActions = !isOwnStaffView;
 
+  /** Same handoff pattern as student/parent Login as. */
   const openImpersonateHref = (href: string, label: string, description?: string) => {
     setLoginAsBusy(true);
-    // Preview sessions keep the school JWT in this tab's sessionStorage — stay here.
-    if (session?.impersonated) {
-      toast.success(label, { description: description ?? "Switching preview in this tab" });
+    const sameWindow = isEmbeddedWebView() || Boolean(session?.impersonated);
+    const tab = sameWindow ? null : window.open("", "_blank");
+    if (!sameWindow && !tab) {
+      toast.message(label, { description: "Pop-ups blocked · continuing in this tab" });
       window.location.assign(href);
       return;
     }
-    const tab = window.open(href, "_blank");
-    if (tab) {
-      try {
-        tab.opener = null;
-      } catch {
-        // ignore
-      }
+    if (sameWindow || !tab) {
       toast.success(label, {
-        description: description ?? "New tab · your admin session stays here",
+        description: description ?? "Opening preview in this tab",
       });
-      setLoginAsBusy(false);
+      window.location.assign(href);
       return;
     }
-    toast.message(label, { description: "Pop-ups blocked · continuing in this tab" });
-    window.location.assign(href);
+    tab.location.replace(href);
+    try {
+      tab.opener = null;
+    } catch {
+      // ignore
+    }
+    toast.success(label, {
+      description: description ?? "New tab · your admin session stays here",
+    });
+    setLoginAsBusy(false);
   };
 
   useEffect(() => {
@@ -796,8 +805,6 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
     }
   };
 
-  const isActive = isRecordActive(staff.active);
-
   const openShare = () => {
     if (openingShare) return;
     setOpeningShare(true);
@@ -856,62 +863,54 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                 <span className="inline-flex rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-2.5 py-1 text-[11px] font-medium text-[#0F766E]">
                   {staff.dept}
                 </span>
-                <span
-                  className={cn(
-                    "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                    isActive ? "bg-[#0F766E] text-white" : "bg-black/10 text-black/55",
-                  )}
-                >
-                  {isActive ? "Active" : "Inactive"}
-                </span>
               </div>
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 sm:justify-end">
-            <button
-              type="button"
-              onClick={openShare}
-              disabled={openingShare}
-              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#99F6E4] hover:bg-[#F0FDFA] hover:text-[#0F766E] disabled:opacity-60"
-            >
-              {openingShare ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ClipboardList className="h-4 w-4" />
-              )}
-              Collect
-            </button>
-            <button
-              type="button"
-              onClick={openStaffLoginAs}
-              disabled={loginAsBusy || !showLoginAs}
-              aria-label={`Login as ${staff.name}`}
-              title={
-                !showLoginAs
-                  ? "You are already signed in as this staff member"
-                  : linkedUser
-                    ? "Open the workspace as this staff member in a new tab"
-                    : "Opens Settings → Users if this staff has no linked login yet"
-              }
-              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-4 text-[13px] font-semibold text-[#0F766E] shadow-sm transition-colors hover:border-[#5EEAD4] hover:bg-[#CCFBF1] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loginAsBusy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ExternalLink className="h-4 w-4" />
-              )}
-              Login as
-            </button>
-            <button
-              type="button"
-              onClick={openEditPage}
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0D9488]"
-            >
-              <Pencil className="h-4 w-4" />
-              Edit Profile
-            </button>
-          </div>
+          {showAdminActions ? (
+            <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 sm:justify-end">
+              <button
+                type="button"
+                onClick={openShare}
+                disabled={openingShare}
+                className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#99F6E4] hover:bg-[#F0FDFA] hover:text-[#0F766E] disabled:opacity-60"
+              >
+                {openingShare ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ClipboardList className="h-4 w-4" />
+                )}
+                Collect
+              </button>
+              <button
+                type="button"
+                onClick={openStaffLoginAs}
+                disabled={loginAsBusy || !showLoginAs}
+                aria-label={`Login as ${staff.name}`}
+                title={
+                  !showLoginAs
+                    ? "You are already signed in as this staff member"
+                    : "Open the workspace as this staff member in a new tab"
+                }
+                className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-4 text-[13px] font-semibold text-[#0F766E] shadow-sm transition-colors hover:border-[#5EEAD4] hover:bg-[#CCFBF1] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loginAsBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ExternalLink className="h-4 w-4" />
+                )}
+                Login as
+              </button>
+              <button
+                type="button"
+                onClick={openEditPage}
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0D9488]"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit Profile
+              </button>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -1822,8 +1821,9 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
 
             {salaryHistory.length === 0 ? (
               <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50 dark:border-white/15 dark:bg-zinc-900/60 dark:text-zinc-400">
-                No salary payments recorded yet. Confirm a salary payment from Finance → Make
-                Payment to see it here.
+                {isOwnStaffView
+                  ? "No salary payments recorded yet. Payments appear here once payroll is processed."
+                  : "No salary payments recorded yet. Confirm a salary payment from Finance → Make Payment to see it here."}
               </div>
             ) : (
               <>
@@ -2195,32 +2195,18 @@ function PayrollDueBox({
   hint?: string;
 }) {
   const cleared = totalDue <= 0;
+  // Salary overview — not student fee collection; avoid Pay/OVERDUE chrome.
   return (
-    <div
-      className={cn(
-        "rounded-lg p-4",
-        !cleared && overdue ? "bg-[#0F766E]" : "bg-slate-50 dark:bg-zinc-900/70",
-      )}
-    >
-      <div
-        className={cn(
-          "flex items-start justify-between",
-          !cleared && overdue ? "text-white/75" : "text-black/55 dark:text-zinc-400",
-        )}
-      >
-        <div className="text-[11px] font-semibold uppercase tracking-wider">Total Due</div>
-        {!cleared && overdue ? (
-          <AlertTriangle className="h-4 w-4 text-[#EF4444]" />
-        ) : (
+    <div className="rounded-lg bg-slate-50 p-4 dark:bg-zinc-900/70">
+      <div className="flex items-start justify-between text-black/55 dark:text-zinc-400">
+        <div className="text-[11px] font-semibold uppercase tracking-wider">Outstanding</div>
+        {cleared ? (
           <CheckCircle2 className="h-4 w-4 text-black dark:text-zinc-400" />
+        ) : (
+          <Wallet className="h-4 w-4 text-black/45 dark:text-zinc-500" />
         )}
       </div>
-      <div
-        className={cn(
-          "mt-2 font-mono text-xl font-semibold tracking-tight",
-          !cleared && overdue ? "text-white" : "text-black dark:text-zinc-100",
-        )}
-      >
+      <div className="mt-2 font-mono text-xl font-semibold tracking-tight text-black dark:text-zinc-100">
         {formatMoney(totalDue)}
       </div>
       <span
@@ -2229,22 +2215,13 @@ function PayrollDueBox({
           cleared
             ? "bg-[#0F172A] text-[#10B981]"
             : overdue
-              ? "bg-[#0F172A] text-[#EF4444]"
-              : "bg-[#0F172A] text-[#F59E0B]",
+              ? "bg-[#0F172A] text-[#F59E0B]"
+              : "bg-[#0F172A] text-[#94A3B8]",
         )}
       >
-        {cleared ? "[ CLEARED ]" : overdue ? "[ OVERDUE ]" : "[ PENDING ]"}
+        {cleared ? "[ SETTLED ]" : overdue ? "[ OUTSTANDING ]" : "[ PENDING ]"}
       </span>
-      {hint ? (
-        <p
-          className={cn(
-            "mt-2 text-[11px]",
-            !cleared && overdue ? "text-white/70" : "text-black/45 dark:text-zinc-500",
-          )}
-        >
-          {hint}
-        </p>
-      ) : null}
+      {hint ? <p className="mt-2 text-[11px] text-black/45 dark:text-zinc-500">{hint}</p> : null}
     </div>
   );
 }

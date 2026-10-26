@@ -97,25 +97,21 @@ function FeatureRow({ compact }: { compact?: boolean }) {
   return (
     <ul
       className={cn(
-        "grid w-full grid-cols-2 sm:grid-cols-4",
-        compact ? "mt-5 max-w-lg gap-3" : "mt-7 max-w-[34rem] gap-4",
+        "grid w-full",
+        compact
+          ? "mt-5 grid-cols-2 gap-x-4 gap-y-4"
+          : "mt-7 max-w-[34rem] grid-cols-2 gap-4 sm:grid-cols-4",
       )}
     >
       {FEATURES.map(({ label, icon: Icon, tone }) => (
         <li key={label} className="flex min-w-0 flex-col items-center gap-2 text-center">
-          <span
-            className={cn(
-              "grid place-items-center rounded-2xl",
-              compact ? "h-10 w-10" : "h-11 w-11",
-              tone,
-            )}
-          >
-            <Icon className={compact ? "h-4 w-4" : "h-[18px] w-[18px]"} strokeWidth={2} aria-hidden />
+          <span className={cn("grid h-11 w-11 place-items-center rounded-2xl", tone)}>
+            <Icon className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
           </span>
           <span
             className={cn(
               "w-full font-medium leading-snug text-[#475569]",
-              compact ? "text-[10.5px]" : "text-[11.5px] sm:text-[12px]",
+              compact ? "text-[11px] sm:text-[12px]" : "text-[11.5px] sm:text-[12px]",
             )}
           >
             {label}
@@ -127,35 +123,50 @@ function FeatureRow({ compact }: { compact?: boolean }) {
 }
 
 function HeroBlock({ compact }: { compact?: boolean }) {
+  if (compact) {
+    return (
+      <div className="relative mx-auto mt-4 w-full max-w-md px-1 sm:mt-5">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-[6%] inset-y-[2%] -z-0 rounded-[50%] bg-[radial-gradient(ellipse_at_50%_55%,_#D8F3EA_0%,_#EAF9F4_45%,_transparent_72%)]"
+        />
+        <div
+          className={cn(
+            "relative z-[1] mx-auto aspect-[16/9] w-full max-h-[200px] overflow-hidden sm:max-h-[230px]",
+            "[mask-image:radial-gradient(ellipse_80%_85%_at_50%_50%,#000_48%,transparent_100%),linear-gradient(#000_0%,#000_78%,transparent_100%)]",
+            "[-webkit-mask-image:radial-gradient(ellipse_80%_85%_at_50%_50%,#000_48%,transparent_100%),linear-gradient(#000_0%,#000_78%,transparent_100%)]",
+            "[mask-composite:intersect]",
+            "[-webkit-mask-composite:source-in]",
+          )}
+        >
+          <img
+            src="/auth/login-hero.png?v=8"
+            alt="Students collaborating on a laptop with school books and campus"
+            className="pointer-events-none h-full w-full select-none object-cover object-[68%_42%]"
+            width={1226}
+            height={693}
+            decoding="async"
+            fetchPriority="low"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={cn(
-        "relative w-full overflow-visible",
-        // Desktop: sit under the copy and bleed toward the card like the mockup
-        compact ? "mt-3" : "mt-auto pt-2 lg:-mr-24 lg:pt-4 xl:-mr-32 xl:pt-6",
-      )}
-    >
-      {/* Soft mint island bridges cutout into page waves */}
+    <div className="relative mt-auto w-full overflow-visible pt-2 lg:-mr-24 lg:pt-4 xl:-mr-32 xl:pt-6">
       <div
         aria-hidden
-        className={cn(
-          "pointer-events-none absolute -inset-[6%] -z-0 rounded-[46%] bg-[radial-gradient(ellipse_at_55%_60%,_#D8F3EA_0%,_#E8F8F2_38%,_transparent_70%)] blur-[2px]",
-          compact && "-inset-[2%]",
-        )}
+        className="pointer-events-none absolute -inset-[6%] -z-0 rounded-[46%] bg-[radial-gradient(ellipse_at_55%_60%,_#D8F3EA_0%,_#E8F8F2_38%,_transparent_70%)] blur-[2px]"
       />
       <img
         src="/auth/login-hero.png?v=8"
         alt="Students collaborating on a laptop with school books and campus"
-        className={cn(
-          "pointer-events-none relative z-[1] h-auto w-full max-w-none select-none object-contain object-left-bottom drop-shadow-[0_18px_40px_rgba(15,80,60,0.08)]",
-          compact
-            ? "mx-auto max-h-[210px] sm:max-h-[240px]"
-            : "max-h-[300px] lg:max-h-[360px] xl:max-h-[410px] lg:scale-[1.1] lg:origin-bottom-left",
-        )}
+        className="pointer-events-none relative z-[1] h-auto w-full max-w-none origin-bottom-left select-none object-contain object-left-bottom drop-shadow-[0_18px_40px_rgba(15,80,60,0.08)] max-h-[300px] lg:max-h-[360px] lg:scale-[1.1] xl:max-h-[410px]"
         width={1226}
         height={693}
         decoding="async"
-        fetchPriority={compact ? "low" : "high"}
+        fetchPriority="high"
       />
     </div>
   );
@@ -200,17 +211,19 @@ function BrandPanel({ compact }: { compact?: boolean }) {
     <div
       className={cn(
         "relative flex min-h-0 w-full flex-col",
-        compact ? "gap-0 pb-2 pt-1" : "h-full min-h-[min(100%,640px)] justify-between py-1",
+        compact
+          ? "items-stretch gap-0 pb-1 pt-1"
+          : "h-full min-h-[min(100%,640px)] justify-between py-1",
       )}
     >
-      <div className="relative z-[1] w-full">
+      <div className={cn("relative z-[1] w-full", compact && "mx-auto w-full max-w-md")}>
         <LoginBrand size={compact ? "sm" : "md"} />
 
         <h1
           className={cn(
             "mt-5 font-bold tracking-tight text-[#0B1B33]",
             compact
-              ? "max-w-[20rem] text-[22px] leading-[1.22] sm:text-[26px]"
+              ? "max-w-[18.5rem] text-[24px] leading-[1.2] sm:max-w-[22rem] sm:text-[28px]"
               : "max-w-[26rem] text-[30px] leading-[1.16] sm:text-[34px] xl:text-[38px]",
           )}
           style={{ fontFamily: '"Plus Jakarta Sans", Inter, system-ui, sans-serif' }}
@@ -221,7 +234,7 @@ function BrandPanel({ compact }: { compact?: boolean }) {
           className={cn(
             "mt-3 text-[#64748B]",
             compact
-              ? "max-w-md text-[13px] leading-relaxed"
+              ? "max-w-[20rem] text-[13.5px] leading-relaxed sm:max-w-md sm:text-[14px]"
               : "max-w-[28rem] text-[14.5px] leading-relaxed sm:text-[15px]",
           )}
         >
@@ -287,9 +300,9 @@ export function AuthShell({
     <div className="relative min-h-dvh overflow-x-hidden bg-[#F7FCFA]">
       <WaveBackdrop />
 
-      <div className="relative mx-auto grid min-h-dvh w-full max-w-[1180px] grid-cols-1 px-4 py-[calc(1rem+env(safe-area-inset-top))] sm:px-6 lg:grid-cols-[1fr_420px] lg:items-stretch lg:gap-x-8 lg:px-10 lg:py-8 xl:grid-cols-[1.05fr_440px] xl:gap-x-12 xl:px-12">
-        {/* Left marketing column */}
-        <div className="relative z-0 min-w-0 lg:flex lg:flex-col lg:pb-2">
+      <div className="relative mx-auto grid min-h-dvh w-full max-w-[1180px] grid-cols-1 gap-y-1 px-5 py-[calc(1rem+env(safe-area-inset-top))] sm:px-6 lg:grid-cols-[1fr_420px] lg:items-stretch lg:gap-x-8 lg:gap-y-0 lg:px-10 lg:py-8 xl:grid-cols-[1.05fr_440px] xl:gap-x-12 xl:px-12">
+        {/* Marketing — single panel, responsive via compact/desktop CSS inside */}
+        <div className="relative z-0 min-w-0 lg:flex lg:h-full lg:flex-col lg:pb-2">
           <div className="lg:hidden">
             <BrandPanel compact />
           </div>
@@ -298,13 +311,13 @@ export function AuthShell({
           </div>
         </div>
 
-        {/* Right login column — card + legal centered under card */}
-        <div className="relative z-10 flex min-w-0 flex-col justify-center pb-[calc(1rem+env(safe-area-inset-bottom))] pt-5 lg:pb-6 lg:pt-0">
-          <div className="mx-auto w-full max-w-[420px] lg:max-w-none">
-            <div className="w-full rounded-[28px] border border-[#EEF2F0] bg-white px-6 py-7 shadow-[0_24px_64px_-24px_rgba(15,50,40,0.28)] sm:rounded-[32px] sm:px-8 sm:py-8 lg:px-9 lg:py-9">
+        {/* Sign-in card + legal — centered under card on all sizes */}
+        <div className="relative z-10 flex min-w-0 flex-col justify-center pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-5 lg:pb-6 lg:pt-0">
+          <div className="mx-auto w-full max-w-[400px] sm:max-w-[420px] lg:max-w-none">
+            <div className="w-full rounded-[24px] border border-[#EEF2F0] bg-white px-5 py-6 shadow-[0_24px_64px_-24px_rgba(15,50,40,0.28)] sm:rounded-[32px] sm:px-8 sm:py-8 lg:px-9 lg:py-9">
               <div className="relative pr-24 sm:pr-28">
                 <h1
-                  className="text-[26px] font-bold tracking-tight text-[#0B1B33] sm:text-[28px]"
+                  className="text-[24px] font-bold tracking-tight text-[#0B1B33] sm:text-[28px]"
                   style={{ fontFamily: '"Plus Jakarta Sans", Inter, system-ui, sans-serif' }}
                 >
                   {title}
@@ -317,7 +330,7 @@ export function AuthShell({
               {children}
             </div>
 
-            <LegalNav className="mt-5 text-center" />
+            <LegalNav className="mt-5 overflow-x-auto whitespace-nowrap text-center" />
           </div>
         </div>
       </div>

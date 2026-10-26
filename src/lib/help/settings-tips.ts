@@ -144,12 +144,13 @@ export const BRANCH_ORDER_TIP: InfoTipContent = {
 export const CLASSES_TIP: InfoTipContent = {
   title: "How class fees work",
   points: [
-    "Each class + division has its own tuition schedule. Receive Payment fills the amount from it.",
-    "Student dues are calculated live from this schedule. When you change a fee, every student in that class (new and existing) sees the new balance for the current year.",
-    "Receipts already recorded are never changed. Only the remaining balance is recalculated.",
-    "Students with a tuition concession keep their own concession schedule.",
+    "Each class + division has its own tuition schedule. Receive Payment prefills amounts from it.",
+    "Action icons: Edit · Duplicate (new class with the same fees) · Apply (push this schedule to other classes) · Delete.",
+    "Same fees across grades? Set one class, then use Apply. Different fees (e.g. KG vs Grade 1–12)? Keep separate schedules.",
+    "Inside Add/Edit, use “Copy fees from” to pull another class’s installments and due dates.",
+    "Dues update live when you change a schedule. Past receipts never change. Concession students keep their own plan.",
   ],
-  note: "Settings here belong to this campus and the active financial year. A new year starts with a copy of these classes.",
+  note: "This list shows the active academic year only. Opening a new year copies these class tiers.",
 };
 
 export const CLASS_IDENTITY_TIP: InfoTipContent = {
@@ -269,12 +270,13 @@ export const LEAVE_ACTIVE_TIP: InfoTipContent = {
 export const ROUTES_TIP: InfoTipContent = {
   title: "How bus fees work",
   points: [
-    "Each route is a pickup → drop pair with morning, evening and both-shift fees.",
-    "On a student, Bus Point 1 is pickup and Bus Point 2 is drop. Both filled = both shifts; one = morning or evening only.",
-    "Vehicle fees are calculated live. Editing a route fee updates the balance of every student on it (new and existing) for the current year.",
-    "Receipts already recorded don't change.",
+    "Each route is a pickup → drop pair with morning, evening, and both-shift fees.",
+    "On a student, Bus Point 1 is pickup and Bus Point 2 is drop. Both filled = both shifts; one filled = morning or evening only.",
+    "Action icons: Edit · Duplicate (new route with the same fees) · Apply (push fees to other routes) · Delete.",
+    "Inside Add/Edit, use “Copy fees from” when several routes share the same amounts and due dates.",
+    "Fees update live for students on that route. Past receipts never change.",
   ],
-  note: "Renaming or deleting a route doesn't update students. Their bus point then shows under “missing from routes” so you can fix it.",
+  note: "This list shows the active academic year only. Renaming or deleting a route doesn’t move students — fix orphaned points from the alert.",
 };
 
 export const ROUTE_POINTS_TIP: InfoTipContent = {
@@ -291,6 +293,7 @@ export const ROUTE_FEES_TIP: InfoTipContent = {
   points: [
     "Morning: pickup only. Evening: drop only. Both: pickup and drop.",
     "The schedule below uses the both-shift amounts. Morning and evening use the same periods and due dates with their own single amount.",
+    "Copy fees from another route, Duplicate a row for a new pickup/drop, or Apply this schedule to many routes when amounts match.",
     "A vehicle concession on a student overrides these fees.",
   ],
 };

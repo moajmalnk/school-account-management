@@ -71,6 +71,8 @@ import {
   Route,
   Scan,
   CircleHelp,
+  Copy,
+  Layers,
 } from "lucide-react";
 import {
   Area,
@@ -265,6 +267,17 @@ import {
   type VehicleDocumentKind,
   type VehicleOwnership,
 } from "@/lib/tenant-store";
+import {
+  cappedInstallmentCount,
+  classFeePayloadFromSource,
+  classHasConfiguredSchedule,
+  classScheduleLabel,
+  cloneFeeScheduleFields,
+  fillDueDatesFromFirst,
+  routeFeePayloadFromSource,
+  routeHasConfiguredSchedule,
+  routeScheduleLabel,
+} from "@/lib/fee-schedule-actions";
 import { classSelectOptions } from "@/lib/class-options";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
 import {
@@ -399,6 +412,8 @@ import {
   sessionCanAccessSettings,
   sessionCanAccessSettingsTab,
   sessionCanAccessFinanceView,
+  sessionHasAnyFinance,
+  sessionHasPermission,
   sessionStaffClassScopeId,
   useAuth,
 } from "@/lib/auth";
@@ -1390,6 +1405,11 @@ function PremiumDashboard({
   onOpenTransferReports,
   expensesReady = true,
 }: PremiumDashboardProps) {
+  const { session } = useAuth();
+  const showFinanceChrome = sessionHasAnyFinance(session);
+  const canReceivePayment = sessionCanAccessFinanceView(session, "receive");
+  const canMakePayment = sessionCanAccessFinanceView(session, "make");
+  const canAdmitStudent = sessionHasPermission(session, "students");
   const liveStudents = students.filter((s) => !isRecordDeleted(s.deletedAt));
   const liveStaff = staff.filter((s) => !isRecordDeleted(s.deletedAt));
   const inHand = cashPosition.cash;
@@ -1477,7 +1497,9 @@ function PremiumDashboard({
                     {liveStudents.length}
                   </div>
                   <div className="mt-1 text-[11px] font-medium text-emerald-800/80 dark:text-emerald-100/70">
-                    {paidCount} paid · {liveStudents.length - paidCount} with dues
+                    {showFinanceChrome
+                      ? `${paidCount} paid · ${liveStudents.length - paidCount} with dues`
+                      : `${liveStudents.length} enrolled`}
                   </div>
                 </div>
               </button>
@@ -1507,266 +1529,283 @@ function PremiumDashboard({
                 </div>
               </button>
             </div>
-            <button
-              type="button"
-              onClick={onAdmitStudent}
-              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-[#0D9488] to-[#0F766E] px-3 py-2.5 text-[12.5px] font-semibold text-white shadow-md shadow-teal-700/25 transition-opacity hover:opacity-90"
-            >
-              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-              Admit a Student
-            </button>
+            {canAdmitStudent ? (
+              <button
+                type="button"
+                onClick={onAdmitStudent}
+                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-[#0D9488] to-[#0F766E] px-3 py-2.5 text-[12.5px] font-semibold text-white shadow-md shadow-teal-700/25 transition-opacity hover:opacity-90"
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                Admit a Student
+              </button>
+            ) : null}
           </section>
 
-          {/* Financial Summary */}
-          <section className={cn(dashCardClass, DASH.finance, "flex min-w-0 flex-col p-4 sm:p-5")}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <DashboardPanelHeading icon={Wallet} title="Financial Summary" />
-              <div className="w-full min-w-0 sm:w-auto sm:max-w-[11rem] sm:shrink-0">
-                <DashboardPeriodFilter
-                  period={period}
-                  onPeriodChange={setPeriod}
-                  customRange={customRange}
-                  onCustomRangeChange={setCustomRange}
-                />
-              </div>
-            </div>
-            <div className="mt-4">
-              <IncomeExpenseSummaryTiles
-                income={periodIncome}
-                expense={expenseTotal}
-                receiptCount={periodReceiptCount}
-                paymentCount={periodExpenseCount}
-                expensePending={!expensesReady}
-              />
-            </div>
-          </section>
-
-          {/* Outstanding Payments */}
-          <section
-            className={cn(dashCardClass, DASH.outstanding, "flex min-w-0 flex-col p-4 sm:p-5")}
-          >
-            <DashboardPanelHeading icon={HandCoins} title="Outstanding Payments" />
-            <div className="mt-4 grid min-w-0 flex-1 grid-cols-1 gap-3">
-              <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 dark:ring-1 dark:ring-white/10 sm:min-h-[100px] sm:p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 text-[12px] font-medium text-slate-600 dark:text-zinc-300">
-                    Fee Outstanding
-                  </span>
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#FED7AA]/80 text-orange-600 dark:text-amber-300">
-                    <HandCoins className="h-4 w-4" />
-                  </span>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[11px] font-medium text-slate-500">
-                    {outstandingStudentCount} students
+          {showFinanceChrome ? (
+            <>
+              {/* Financial Summary */}
+              <section className={cn(dashCardClass, DASH.finance, "flex min-w-0 flex-col p-4 sm:p-5")}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <DashboardPanelHeading icon={Wallet} title="Financial Summary" />
+                  <div className="w-full min-w-0 sm:w-auto sm:max-w-[11rem] sm:shrink-0">
+                    <DashboardPeriodFilter
+                      period={period}
+                      onPeriodChange={setPeriod}
+                      customRange={customRange}
+                      onCustomRangeChange={setCustomRange}
+                    />
                   </div>
-                  <DashboardAmount value={totalDue} className="mt-1 text-slate-900" />
                 </div>
-              </div>
-              <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 dark:ring-1 dark:ring-white/10 sm:min-h-[100px] sm:p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 text-[12px] font-medium text-slate-600 dark:text-zinc-300">
-                    Salary Outstanding
-                  </span>
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300">
-                    <Banknote className="h-4 w-4" />
-                  </span>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[11px] font-medium text-slate-500">
-                    {!expensesReady ? (
-                      <span className="inline-block h-3 w-24 animate-pulse rounded bg-slate-200/80 dark:bg-white/10" />
-                    ) : salaryOutstandingStaff > 0 ? (
-                      `${salaryOutstandingStaff} queued`
-                    ) : (
-                      "No payroll created"
-                    )}
-                  </div>
-                  <DashboardAmount
-                    value={salaryOutstanding}
-                    pending={!expensesReady}
-                    className="mt-1 text-slate-900"
+                <div className="mt-4">
+                  <IncomeExpenseSummaryTiles
+                    income={periodIncome}
+                    expense={expenseTotal}
+                    receiptCount={periodReceiptCount}
+                    paymentCount={periodExpenseCount}
+                    expensePending={!expensesReady}
                   />
                 </div>
-              </div>
-            </div>
-          </section>
+              </section>
 
-          {/* Cash Position — GL cash/bank ledgers when available (includes fund transfers) */}
-          <section className={cn(dashCardClass, DASH.cash, "flex min-w-0 flex-col p-4 sm:p-5")}>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <DashboardPanelHeading icon={Landmark} title="Cash Position" />
-                <p className="mt-1 pl-[2.625rem] text-[11px] font-medium leading-snug text-slate-500 dark:text-zinc-400">
-                  {cashPosition.source === "gl"
-                    ? "Cash & bank ledgers · fund transfers included · queued bills not deducted"
-                    : "Receipts minus cleared payments by mode · queued bills not deducted"}
-                </p>
-              </div>
-              {onOpenTransferReports ? (
-                <button
-                  type="button"
-                  onClick={onOpenTransferReports}
-                  className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-700 ring-1 ring-violet-200/80 transition-colors hover:bg-violet-50 dark:text-violet-300 dark:ring-violet-500/30 dark:hover:bg-violet-500/10"
-                >
-                  Transfers
-                </button>
-              ) : null}
-            </div>
-            <div className="mt-4 grid min-w-0 flex-1 grid-cols-1 gap-2 min-[20rem]:grid-cols-2 sm:gap-3">
-              <div
-                className={cn(
-                  dashCashInHandTileClass,
-                  "flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl p-2.5 sm:p-3.5",
-                )}
+              {/* Outstanding Payments */}
+              <section
+                className={cn(dashCardClass, DASH.outstanding, "flex min-w-0 flex-col p-4 sm:p-5")}
               >
-                <div className="flex items-center justify-between gap-1.5 text-[#047857] dark:text-emerald-300">
-                  <span
-                    className="min-w-0 text-[11px] font-semibold leading-snug text-emerald-950 sm:text-[12px] dark:text-emerald-50"
-                    title="Cash ledger balance"
-                  >
-                    <span className="min-[22rem]:hidden">Cash</span>
-                    <span className="hidden min-[22rem]:inline">Cash In Hand</span>
-                  </span>
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/80 text-[#047857] shadow-sm dark:bg-white/10 dark:text-emerald-300">
-                    <Banknote className="h-3.5 w-3.5 shrink-0" />
-                  </span>
-                </div>
-                <DashboardAmount
-                  value={inHand}
-                  compact
-                  pending={!cashReady}
-                  className={
-                    inHand < 0
-                      ? "text-rose-700 dark:text-rose-300"
-                      : "text-emerald-950 dark:text-emerald-50"
-                  }
-                />
-              </div>
-              <div
-                className={cn(
-                  dashBankTileClass,
-                  "flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl p-2.5 sm:p-3.5",
-                )}
-              >
-                <div className="flex items-center justify-between gap-1.5 text-violet-700 dark:text-violet-300">
-                  <span
-                    className="min-w-0 text-[11px] font-semibold leading-snug text-violet-950 sm:text-[12px] dark:text-violet-50"
-                    title={
-                      bankLines.length > 1
-                        ? bankLines.map((b) => `${b.name}: ${formatMoney(b.balance)}`).join(" · ")
-                        : "Bank ledger balance"
-                    }
-                  >
-                    <span className="min-[22rem]:hidden">Bank</span>
-                    <span className="hidden min-[22rem]:inline">
-                      {bankLines.length > 1 ? `Banks (${bankLines.length})` : "Bank Balance"}
-                    </span>
-                  </span>
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/80 text-violet-700 shadow-sm dark:bg-white/10 dark:text-violet-300">
-                    <Landmark className="h-3.5 w-3.5 shrink-0" />
-                  </span>
-                </div>
-                <DashboardAmount
-                  value={inBank}
-                  compact
-                  pending={!cashReady}
-                  className={
-                    inBank < 0
-                      ? "text-rose-700 dark:text-rose-300"
-                      : "text-violet-950 dark:text-violet-50"
-                  }
-                />
-                {bankLines.length > 1 && cashReady ? (
-                  <div className="mt-1.5 space-y-0.5 border-t border-violet-200/50 pt-1.5 dark:border-violet-500/20">
-                    {bankLines.slice(0, 3).map((b) => (
-                      <div
-                        key={b.accountId}
-                        className="flex items-center justify-between gap-2 text-[10px] leading-tight text-violet-900/75 dark:text-violet-100/70"
-                      >
-                        <span className="min-w-0 truncate font-medium">{b.name}</span>
-                        <span
-                          className={cn(
-                            "shrink-0 font-mono font-semibold",
-                            b.balance < 0 && "text-rose-600 dark:text-rose-300",
-                          )}
-                        >
-                          {formatMoney(b.balance)}
-                        </span>
+                <DashboardPanelHeading icon={HandCoins} title="Outstanding Payments" />
+                <div className="mt-4 grid min-w-0 flex-1 grid-cols-1 gap-3">
+                  <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 dark:ring-1 dark:ring-white/10 sm:min-h-[100px] sm:p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 text-[12px] font-medium text-slate-600 dark:text-zinc-300">
+                        Fee Outstanding
+                      </span>
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#FED7AA]/80 text-orange-600 dark:text-amber-300">
+                        <HandCoins className="h-4 w-4" />
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-medium text-slate-500">
+                        {outstandingStudentCount} students
                       </div>
-                    ))}
-                    {bankLines.length > 3 ? (
-                      <p className="text-[9px] text-violet-700/60 dark:text-violet-200/50">
-                        +{bankLines.length - 3} more
-                      </p>
+                      <DashboardAmount value={totalDue} className="mt-1 text-slate-900" />
+                    </div>
+                  </div>
+                  <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 dark:ring-1 dark:ring-white/10 sm:min-h-[100px] sm:p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 text-[12px] font-medium text-slate-600 dark:text-zinc-300">
+                        Salary Outstanding
+                      </span>
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300">
+                        <Banknote className="h-4 w-4" />
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-medium text-slate-500">
+                        {!expensesReady ? (
+                          <span className="inline-block h-3 w-24 animate-pulse rounded bg-slate-200/80 dark:bg-white/10" />
+                        ) : salaryOutstandingStaff > 0 ? (
+                          `${salaryOutstandingStaff} queued`
+                        ) : (
+                          "No payroll created"
+                        )}
+                      </div>
+                      <DashboardAmount
+                        value={salaryOutstanding}
+                        pending={!expensesReady}
+                        className="mt-1 text-slate-900"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Cash Position — GL cash/bank ledgers when available (includes fund transfers) */}
+              <section className={cn(dashCardClass, DASH.cash, "flex min-w-0 flex-col p-4 sm:p-5")}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <DashboardPanelHeading icon={Landmark} title="Cash Position" />
+                    <p className="mt-1 pl-[2.625rem] text-[11px] font-medium leading-snug text-slate-500 dark:text-zinc-400">
+                      {cashPosition.source === "gl"
+                        ? "Cash & bank ledgers · fund transfers included · queued bills not deducted"
+                        : "Receipts minus cleared payments by mode · queued bills not deducted"}
+                    </p>
+                  </div>
+                  {onOpenTransferReports ? (
+                    <button
+                      type="button"
+                      onClick={onOpenTransferReports}
+                      className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-700 ring-1 ring-violet-200/80 transition-colors hover:bg-violet-50 dark:text-violet-300 dark:ring-violet-500/30 dark:hover:bg-violet-500/10"
+                    >
+                      Transfers
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-4 grid min-w-0 flex-1 grid-cols-1 gap-2 min-[20rem]:grid-cols-2 sm:gap-3">
+                  <div
+                    className={cn(
+                      dashCashInHandTileClass,
+                      "flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl p-2.5 sm:p-3.5",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-1.5 text-[#047857] dark:text-emerald-300">
+                      <span
+                        className="min-w-0 text-[11px] font-semibold leading-snug text-emerald-950 sm:text-[12px] dark:text-emerald-50"
+                        title="Cash ledger balance"
+                      >
+                        <span className="min-[22rem]:hidden">Cash</span>
+                        <span className="hidden min-[22rem]:inline">Cash In Hand</span>
+                      </span>
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/80 text-[#047857] shadow-sm dark:bg-white/10 dark:text-emerald-300">
+                        <Banknote className="h-3.5 w-3.5 shrink-0" />
+                      </span>
+                    </div>
+                    <DashboardAmount
+                      value={inHand}
+                      compact
+                      pending={!cashReady}
+                      className={
+                        inHand < 0
+                          ? "text-rose-700 dark:text-rose-300"
+                          : "text-emerald-950 dark:text-emerald-50"
+                      }
+                    />
+                  </div>
+                  <div
+                    className={cn(
+                      dashBankTileClass,
+                      "flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl p-2.5 sm:p-3.5",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-1.5 text-violet-700 dark:text-violet-300">
+                      <span
+                        className="min-w-0 text-[11px] font-semibold leading-snug text-violet-950 sm:text-[12px] dark:text-violet-50"
+                        title={
+                          bankLines.length > 1
+                            ? bankLines.map((b) => `${b.name}: ${formatMoney(b.balance)}`).join(" · ")
+                            : "Bank ledger balance"
+                        }
+                      >
+                        <span className="min-[22rem]:hidden">Bank</span>
+                        <span className="hidden min-[22rem]:inline">
+                          {bankLines.length > 1 ? `Banks (${bankLines.length})` : "Bank Balance"}
+                        </span>
+                      </span>
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/80 text-violet-700 shadow-sm dark:bg-white/10 dark:text-violet-300">
+                        <Landmark className="h-3.5 w-3.5 shrink-0" />
+                      </span>
+                    </div>
+                    <DashboardAmount
+                      value={inBank}
+                      compact
+                      pending={!cashReady}
+                      className={
+                        inBank < 0
+                          ? "text-rose-700 dark:text-rose-300"
+                          : "text-violet-950 dark:text-violet-50"
+                      }
+                    />
+                    {bankLines.length > 1 && cashReady ? (
+                      <div className="mt-1.5 space-y-0.5 border-t border-violet-200/50 pt-1.5 dark:border-violet-500/20">
+                        {bankLines.slice(0, 3).map((b) => (
+                          <div
+                            key={b.accountId}
+                            className="flex items-center justify-between gap-2 text-[10px] leading-tight text-violet-900/75 dark:text-violet-100/70"
+                          >
+                            <span className="min-w-0 truncate font-medium">{b.name}</span>
+                            <span
+                              className={cn(
+                                "shrink-0 font-mono font-semibold",
+                                b.balance < 0 && "text-rose-600 dark:text-rose-300",
+                              )}
+                            >
+                              {formatMoney(b.balance)}
+                            </span>
+                          </div>
+                        ))}
+                        {bankLines.length > 3 ? (
+                          <p className="text-[9px] text-violet-700/60 dark:text-violet-200/50">
+                            +{bankLines.length - 3} more
+                          </p>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
-                ) : null}
-              </div>
-              <div
-                className={cn(
-                  dashTotalBalanceTileClass,
-                  "col-span-2 flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl p-3.5 sm:p-4",
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-[12px] font-semibold text-white/95">Total Balance</span>
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/20 text-white ring-1 ring-white/35">
-                    <Wallet className="h-4 w-4" />
-                  </span>
+                  <div
+                    className={cn(
+                      dashTotalBalanceTileClass,
+                      "col-span-2 flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl p-3.5 sm:p-4",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[12px] font-semibold text-white/95">Total Balance</span>
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/20 text-white ring-1 ring-white/35">
+                        <Wallet className="h-4 w-4" />
+                      </span>
+                    </div>
+                    <DashboardAmount value={totalBalance} pending={!cashReady} className="text-white" />
+                  </div>
                 </div>
-                <DashboardAmount value={totalBalance} pending={!cashReady} className="text-white" />
-              </div>
-            </div>
-          </section>
+              </section>
+            </>
+          ) : null}
         </div>
 
         {/* Right column */}
         <aside className="flex min-h-0 flex-col gap-4 sm:gap-5 xl:col-span-4">
-          <section className="grid shrink-0 grid-cols-2 gap-3 sm:gap-4">
-            <button
-              type="button"
-              onClick={onReceivePayment}
+          {(canReceivePayment || canMakePayment) && (
+            <section
               className={cn(
-                dashCardClass,
-                DASH.receive,
-                "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-transform hover:-translate-y-0.5",
+                "grid shrink-0 gap-3 sm:gap-4",
+                canReceivePayment && canMakePayment ? "grid-cols-2" : "grid-cols-1",
               )}
             >
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/80 text-[#047857] shadow-sm dark:bg-white/10 dark:text-emerald-300">
-                <ArrowDownToLine className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <div className="text-[13px] font-bold leading-snug text-emerald-950 dark:text-emerald-50">
-                  Receive payment
-                </div>
-                <p className="mt-0.5 text-[11px] leading-snug text-emerald-900/65 dark:text-emerald-100/60">
-                  Capture inbound fee receipts
-                </p>
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={onMakePayment}
-              className={cn(
-                dashCardClass,
-                DASH.pay,
-                "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-transform hover:-translate-y-0.5",
-              )}
-            >
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/80 text-[#BE123C] shadow-sm dark:bg-white/10 dark:text-rose-300">
-                <ArrowUpFromLine className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <div className="text-[13px] font-bold leading-snug text-rose-950 dark:text-rose-50">
-                  Make payment
-                </div>
-                <p className="mt-0.5 text-[11px] leading-snug text-rose-900/65 dark:text-rose-100/60">
-                  Pay salaries and other expenses
-                </p>
-              </div>
-            </button>
-          </section>
+              {canReceivePayment ? (
+                <button
+                  type="button"
+                  onClick={onReceivePayment}
+                  className={cn(
+                    dashCardClass,
+                    DASH.receive,
+                    "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-transform hover:-translate-y-0.5",
+                  )}
+                >
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/80 text-[#047857] shadow-sm dark:bg-white/10 dark:text-emerald-300">
+                    <ArrowDownToLine className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-bold leading-snug text-emerald-950 dark:text-emerald-50">
+                      Receive payment
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-snug text-emerald-900/65 dark:text-emerald-100/60">
+                      Capture inbound fee receipts
+                    </p>
+                  </div>
+                </button>
+              ) : null}
+              {canMakePayment ? (
+                <button
+                  type="button"
+                  onClick={onMakePayment}
+                  className={cn(
+                    dashCardClass,
+                    DASH.pay,
+                    "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-transform hover:-translate-y-0.5",
+                  )}
+                >
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/80 text-[#BE123C] shadow-sm dark:bg-white/10 dark:text-rose-300">
+                    <ArrowUpFromLine className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-bold leading-snug text-rose-950 dark:text-rose-50">
+                      Make payment
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-snug text-rose-900/65 dark:text-rose-100/60">
+                      Pay salaries and other expenses
+                    </p>
+                  </div>
+                </button>
+              ) : null}
+            </section>
+          )}
 
           <DashboardTodoNotesPanel />
         </aside>
@@ -1814,6 +1853,8 @@ function PremiumDashboard({
           </div>
         </section>
 
+        {showFinanceChrome ? (
+          <>
         <section
           className={cn(
             dashCardClass,
@@ -1976,6 +2017,8 @@ function PremiumDashboard({
             })}
           </div>
         </section>
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -2461,10 +2504,11 @@ function FinanceFloatingPaymentActions({
   onMake,
   onTransfer,
 }: {
-  onReceive: () => void;
-  onMake: () => void;
-  onTransfer: () => void;
+  onReceive?: () => void;
+  onMake?: () => void;
+  onTransfer?: () => void;
 }) {
+  if (!onReceive && !onMake && !onTransfer) return null;
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 px-2 md:hidden">
       <div
@@ -2472,36 +2516,42 @@ function FinanceFloatingPaymentActions({
         aria-label="Payment actions"
         className="pointer-events-auto mx-auto flex max-w-lg gap-1 rounded-2xl border border-white/70 bg-white/90 p-1.5 shadow-[0_16px_40px_-18px_rgba(15,23,42,0.35)] backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]/92 dark:shadow-black/50"
       >
-        <button
-          type="button"
-          role="tab"
-          onClick={onReceive}
-          aria-label="Receive payment"
-          className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#059669] px-2 text-[11.5px] font-semibold text-white shadow-sm shadow-emerald-900/20 transition-transform active:scale-[0.98] dark:bg-[#10B981] dark:text-zinc-950"
-        >
-          <ArrowDownToLine className="h-4 w-4 shrink-0" strokeWidth={2.25} />
-          <span className="truncate">Receive</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          onClick={onMake}
-          aria-label="Make payment"
-          className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#DC2626] px-2 text-[11.5px] font-semibold text-white shadow-sm shadow-rose-900/20 transition-transform active:scale-[0.98] dark:bg-[#EF4444] dark:text-zinc-950"
-        >
-          <ArrowUpFromLine className="h-4 w-4 shrink-0" strokeWidth={2.25} />
-          <span className="truncate">Make</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          onClick={onTransfer}
-          aria-label="Transfer money"
-          className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0284C7] px-2 text-[11.5px] font-semibold text-white shadow-sm shadow-sky-900/20 transition-transform active:scale-[0.98] dark:bg-[#0EA5E9] dark:text-zinc-950"
-        >
-          <ArrowLeftRight className="h-4 w-4 shrink-0" strokeWidth={2.25} />
-          <span className="truncate">Transfer</span>
-        </button>
+        {onReceive ? (
+          <button
+            type="button"
+            role="tab"
+            onClick={onReceive}
+            aria-label="Receive payment"
+            className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#059669] px-2 text-[11.5px] font-semibold text-white shadow-sm shadow-emerald-900/20 transition-transform active:scale-[0.98] dark:bg-[#10B981] dark:text-zinc-950"
+          >
+            <ArrowDownToLine className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+            <span className="truncate">Receive</span>
+          </button>
+        ) : null}
+        {onMake ? (
+          <button
+            type="button"
+            role="tab"
+            onClick={onMake}
+            aria-label="Make payment"
+            className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#DC2626] px-2 text-[11.5px] font-semibold text-white shadow-sm shadow-rose-900/20 transition-transform active:scale-[0.98] dark:bg-[#EF4444] dark:text-zinc-950"
+          >
+            <ArrowUpFromLine className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+            <span className="truncate">Make</span>
+          </button>
+        ) : null}
+        {onTransfer ? (
+          <button
+            type="button"
+            role="tab"
+            onClick={onTransfer}
+            aria-label="Transfer money"
+            className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0284C7] px-2 text-[11.5px] font-semibold text-white shadow-sm shadow-sky-900/20 transition-transform active:scale-[0.98] dark:bg-[#0EA5E9] dark:text-zinc-950"
+          >
+            <ArrowLeftRight className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+            <span className="truncate">Transfer</span>
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -9192,11 +9242,25 @@ function FinanceOverview({
         </>
       )}
 
-      <FinanceFloatingPaymentActions
-        onReceive={() => onOpenView("receive")}
-        onMake={() => onOpenView("make")}
-        onTransfer={() => onOpenView("transfer")}
-      />
+      {(sessionCanAccessFinanceView(session, "receive") ||
+        sessionCanAccessFinanceView(session, "make") ||
+        sessionCanAccessFinanceView(session, "transfer")) && (
+        <FinanceFloatingPaymentActions
+          onReceive={
+            sessionCanAccessFinanceView(session, "receive")
+              ? () => onOpenView("receive")
+              : undefined
+          }
+          onMake={
+            sessionCanAccessFinanceView(session, "make") ? () => onOpenView("make") : undefined
+          }
+          onTransfer={
+            sessionCanAccessFinanceView(session, "transfer")
+              ? () => onOpenView("transfer")
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }
@@ -16418,8 +16482,10 @@ export function SchoolSettings() {
     tenantUsers,
     setTenantUsers,
     classes,
+    activeClasses,
     setClasses,
     transportRoutes,
+    activeTransportRoutes,
     setTransportRoutes,
     transportVehicles,
     setTransportVehicles,
@@ -16683,7 +16749,7 @@ export function SchoolSettings() {
           {classTierSection === "classes"
             ? renderSettingsPanel(
                 <ClassesCard
-                  classes={classes}
+                  classes={activeClasses}
                   setClasses={setClasses}
                   students={activeStudents}
                   allStudents={students}
@@ -16768,7 +16834,7 @@ export function SchoolSettings() {
         renderSettingsPanel(
           <TransportBusPointPanel
             listLayout={listLayout}
-            transportRoutes={transportRoutes}
+            transportRoutes={activeTransportRoutes}
             setTransportRoutes={setTransportRoutes}
             transportVehicles={transportVehicles}
             setTransportVehicles={setTransportVehicles}
@@ -17825,6 +17891,11 @@ function ClassesCard({
   const [rosterClass, setRosterClass] = useState<ClassConfig | null>(null);
   const [cleaningInvalid, setCleaningInvalid] = useState(false);
   const [confirmCleanInvalid, setConfirmCleanInvalid] = useState(false);
+  const [copyFromId, setCopyFromId] = useState<string>("");
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [applySource, setApplySource] = useState<ClassConfig | null>(null);
+  const [applySelected, setApplySelected] = useState<string[]>([]);
+  const [applyBusy, setApplyBusy] = useState(false);
   type FeeDraftRow = { id: string; label: string; amount: string; dueDate: string };
 
   const emptyOneTimeRows = (): FeeDraftRow[] =>
@@ -17876,12 +17947,13 @@ function ClassesCard({
       ? (teacherOptions.find((m) => m.id === id)?.name ?? staff.find((m) => m.id === id)?.name)
       : undefined;
 
-  const defaultInstallmentCount = (cycle: Extract<ClassBillingCycle, "Monthly" | "Term">) => {
-    const mode = cycle === "Term" ? "term" : "month";
-    const n = filterFeePeriods(feeTerms, mode, "tuition").length;
-    if (n > 0) return String(n);
-    return cycle === "Term" ? "4" : "12";
-  };
+  const defaultInstallmentCount = (cycle: Extract<ClassBillingCycle, "Monthly" | "Term">) =>
+    String(cappedInstallmentCount(cycle, feeTerms, "tuition"));
+
+  const configuredClasses = useMemo(
+    () => classes.filter((c) => classHasConfiguredSchedule(withClassFeeSchedule(c, feeTerms))),
+    [classes, feeTerms],
+  );
 
   const schedulePreview = useMemo(() => {
     const count = Math.max(1, Math.floor(Number(form.installmentCount) || 0));
@@ -17958,8 +18030,11 @@ function ClassesCard({
   const patchInstallmentRow = (index: number, patch: Partial<FeeDraftRow>) => {
     setForm((prev) => {
       const count = Math.max(1, Math.floor(Number(prev.installmentCount) || 0));
-      const rows = ensureInstallmentRows(prev, count);
+      let rows = ensureInstallmentRows(prev, count);
       rows[index] = { ...rows[index], ...patch };
+      if (index === 0 && patch.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(patch.dueDate.trim())) {
+        rows = fillDueDatesFromFirst(rows, prev.billingCycle, true);
+      }
       const nextFixed =
         prev.feeAmountMode === "fixed" && patch.amount !== undefined
           ? patch.amount
@@ -17974,6 +18049,43 @@ function ClassesCard({
         installmentCount: String(rows.length),
       };
     });
+  };
+
+  const scheduleFieldsFromClass = (source: ClassConfig) => {
+    const normalized = withClassFeeSchedule(normalizeClassConfig(source), feeTerms);
+    const cloned = cloneFeeScheduleFields(normalized);
+    const installments = cloned.feeSchedule.filter((l) => l.kind === "installment");
+    const oneTime = cloned.feeSchedule.filter((l) => l.kind === "one_time");
+    return {
+      billingModeChosen: true as const,
+      billingCycle: cloned.billingCycle,
+      feeAmountMode: cloned.feeAmountMode,
+      feeCollectionStartMonth:
+        cloned.feeCollectionStartMonth || defaultFeeCollectionStartMonth(feeTerms),
+      installmentCount: String(
+        installments.length || cappedInstallmentCount(cloned.billingCycle, feeTerms, "tuition"),
+      ),
+      fixedAmount: String(installments[0]?.amount || ""),
+      installments: installments.map((line) => ({
+        id: line.id,
+        label: line.label,
+        amount: line.amount ? String(line.amount) : "",
+        dueDate: line.dueDate ?? "",
+      })),
+      oneTimeFees:
+        oneTime.length > 0
+          ? oneTime.map((line) => ({
+              id: line.id,
+              label: line.label,
+              amount: line.amount ? String(line.amount) : "",
+              dueDate: line.dueDate ?? "",
+            }))
+          : emptyOneTimeRows(),
+    };
+  };
+
+  const applyScheduleCloneToForm = (source: ClassConfig) => {
+    setForm((prev) => ({ ...prev, ...scheduleFieldsFromClass(source) }));
   };
 
   const emptyForm = () => ({
@@ -18025,10 +18137,68 @@ function ClassesCard({
 
   const startCreate = () => {
     setEditingId(null);
+    setCopyFromId("");
     setForm(emptyForm());
     setOpen(true);
   };
+
+  const startDuplicate = (c: ClassConfig) => {
+    setEditingId(null);
+    setCopyFromId(c.id);
+    setForm({
+      ...emptyForm(),
+      ...scheduleFieldsFromClass(c),
+      grade: "",
+      section: "",
+      classTeacherId: "",
+    });
+    setOpen(true);
+    toast.message("Schedule copied", {
+      description: "Set a new class and division, then save.",
+    });
+  };
+
+  const openApplyDialog = (c: ClassConfig) => {
+    setApplySource(withClassFeeSchedule(normalizeClassConfig(c), feeTerms));
+    setApplySelected([]);
+    setApplyOpen(true);
+  };
+
+  const runApplyToClasses = async () => {
+    if (!applySource || applySelected.length === 0 || applyBusy) return;
+    setApplyBusy(true);
+    const fee = classFeePayloadFromSource(applySource);
+    let ok = 0;
+    let failed = 0;
+    for (const id of applySelected) {
+      const target = classes.find((row) => row.id === id);
+      if (!target || target.id === applySource.id) continue;
+      const updated: ClassConfig = {
+        ...target,
+        ...fee,
+        classTeacherId: target.classTeacherId,
+        vehicleFeeAmount: target.vehicleFeeAmount,
+      };
+      setClasses((prev) => prev.map((row) => (row.id === id ? updated : row)));
+      try {
+        await apiUpsertClass(updated);
+        ok += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    setApplyBusy(false);
+    setApplyOpen(false);
+    if (ok > 0) {
+      toast.success(`Applied schedule to ${ok} class${ok === 1 ? "" : "es"}`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} class${failed === 1 ? "" : "es"} could not be updated`);
+    }
+  };
+
   const startEdit = (c: ClassConfig) => {
+    setCopyFromId("");
     const normalized = withClassFeeSchedule(normalizeClassConfig(c), feeTerms);
     const cycle: Extract<ClassBillingCycle, "Monthly" | "Term"> =
       normalized.billingCycle === "Term" ? "Term" : "Monthly";
@@ -18307,42 +18477,74 @@ function ClassesCard({
     };
   };
 
+  const actionBtn =
+    "grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors sm:h-8 sm:w-8";
+
   const classTierActions = (
     c: ClassConfig,
     className: string,
     blockedByStudents: number,
     canDelete: boolean,
   ) => (
-    <div className="flex items-center gap-1.5">
+    <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1">
       <button
         type="button"
         onClick={() => startEdit(c)}
         aria-label={`Edit ${className}`}
-        className="grid h-9 w-9 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400 lg:h-8 lg:w-8"
+        title={`Edit ${className}`}
+        className={cn(
+          actionBtn,
+          "border border-[#E5E5E5] bg-white text-black/55 hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400",
+        )}
       >
         <Pencil className="h-3.5 w-3.5" />
       </button>
-      {canDelete ? (
+      <button
+        type="button"
+        onClick={() => startDuplicate(c)}
+        aria-label={`Duplicate ${className} schedule`}
+        title="Duplicate fee schedule into a new class"
+        className={cn(
+          actionBtn,
+          "border border-[#CCFBF1] bg-[#F0FDFA] text-[#0F766E] hover:border-[#5EEAD4] hover:bg-[#CCFBF1]",
+        )}
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </button>
+      {classHasConfiguredSchedule(c) ? (
         <button
           type="button"
-          onClick={() => requestDelete(c)}
-          aria-label={`Delete ${className}`}
-          title={`Delete ${className}`}
-          className="grid h-9 w-9 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] lg:h-8 lg:w-8"
+          onClick={() => openApplyDialog(c)}
+          aria-label={`Apply ${className} schedule to other classes`}
+          title="Apply this schedule to other classes"
+          className={cn(
+            actionBtn,
+            "border border-[#E5E5E5] bg-white text-black/55 hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400",
+          )}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Layers className="h-3.5 w-3.5" />
         </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => requestDelete(c)}
-          aria-label={`${className} cannot be deleted while ${blockedByStudents} students are enrolled`}
-          title={`${blockedByStudents} student${blockedByStudents === 1 ? "" : "s"} enrolled · move them before deleting`}
-          className="grid h-9 w-9 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] lg:h-8 lg:w-8"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      )}
+      ) : null}
+      <button
+        type="button"
+        onClick={() => requestDelete(c)}
+        aria-label={
+          canDelete
+            ? `Delete ${className}`
+            : `${className} cannot be deleted while ${blockedByStudents} students are enrolled`
+        }
+        title={
+          canDelete
+            ? `Delete ${className}`
+            : `${blockedByStudents} student${blockedByStudents === 1 ? "" : "s"} enrolled · move them before deleting`
+        }
+        className={cn(
+          actionBtn,
+          "border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:border-[#F87171] hover:bg-[#FEE2E2]",
+        )}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 
@@ -18351,7 +18553,7 @@ function ClassesCard({
       <CardHeader
         title="Classes"
         info={CLASSES_TIP}
-        subtitle="Per-class fee schedule for Receive Payment"
+        subtitle="Duplicate, copy, or apply fee schedules across classes"
         actionLabel="Add Class"
         onAction={startCreate}
       />
@@ -18415,8 +18617,11 @@ function ClassesCard({
       )}
 
       {sortedClasses.length === 0 ? (
-        <div className="mt-4">
+        <div className="mt-4 space-y-2">
           <EmptyRow label="No class tiers configured" />
+          <p className="px-1 text-center text-[12px] text-black/45 dark:text-zinc-500">
+            Add one class with its installment schedule, then Duplicate or Apply to other grades.
+          </p>
         </div>
       ) : (
         <>
@@ -18428,31 +18633,23 @@ function ClassesCard({
                   key={c.id}
                   className="overflow-hidden rounded-2xl border border-[#E8EEEC] bg-white shadow-[0_10px_28px_-18px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-zinc-900"
                 >
-                  <div className="flex items-start justify-between gap-3 px-4 pt-4">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-black/40 dark:text-zinc-500">
-                        Class {String(index + 1).padStart(2, "0")}
-                      </p>
-                      <h3 className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-[18px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
-                        <span className="truncate">{meta.grade}</span>
-                        {meta.div !== "—" ? (
-                          <span className="rounded-full bg-[#F0FDFA] px-2 py-0.5 text-[11.5px] font-semibold text-[#0F766E] dark:bg-teal-950/60 dark:text-teal-300">
-                            Div {meta.div}
-                          </span>
-                        ) : null}
-                      </h3>
-                      <p className="mt-1.5 truncate text-[12.5px] text-black/55 dark:text-zinc-400">
-                        {meta.teacher
-                          ? `Class teacher · ${meta.teacher}`
-                          : "No class teacher assigned"}
-                      </p>
-                    </div>
-                    {classTierActions(
-                      c,
-                      meta.normalized.className,
-                      meta.blockedByStudents,
-                      meta.canDelete,
-                    )}
+                  <div className="min-w-0 px-4 pt-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-black/40 dark:text-zinc-500">
+                      Class {String(index + 1).padStart(2, "0")}
+                    </p>
+                    <h3 className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-[18px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
+                      <span className="truncate">{meta.grade}</span>
+                      {meta.div !== "—" ? (
+                        <span className="rounded-full bg-[#F0FDFA] px-2 py-0.5 text-[11.5px] font-semibold text-[#0F766E] dark:bg-teal-950/60 dark:text-teal-300">
+                          Div {meta.div}
+                        </span>
+                      ) : null}
+                    </h3>
+                    <p className="mt-1.5 truncate text-[12.5px] text-black/55 dark:text-zinc-400">
+                      {meta.teacher
+                        ? `Class teacher · ${meta.teacher}`
+                        : "No class teacher assigned"}
+                    </p>
                   </div>
 
                   <dl className="mx-4 mt-3 grid grid-cols-3 overflow-hidden rounded-xl bg-[#F7F8F8] dark:bg-white/5">
@@ -18479,27 +18676,27 @@ function ClassesCard({
                         {formatMoney(meta.normalized.tuitionFeeAmount)}
                       </dd>
                     </div>
-                    <div className="px-2 py-2.5 text-center">
+                    <div className="min-w-0 px-2 py-2.5 text-center">
                       <dt className="text-[9.5px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
                         Cycle
                       </dt>
-                      <dd className="mt-0.5 text-[13px] font-semibold text-slate-900 dark:text-zinc-100">
+                      <dd className="mt-0.5 truncate text-[13px] font-semibold text-slate-900 dark:text-zinc-100">
                         {termMonthLabel(c)}
                       </dd>
                     </div>
                   </dl>
 
-                  <div className="mt-3 border-t border-[#F0F0F0] px-4 py-2.5 dark:border-white/10">
-                    {meta.canDelete ? (
-                      <p className="text-[11.5px] text-black/45 dark:text-zinc-500">
-                        No students enrolled · this class can be removed
-                      </p>
-                    ) : (
-                      <p className="text-[11.5px] text-black/45 dark:text-zinc-500">
-                        {meta.blockedByStudents} student
-                        {meta.blockedByStudents === 1 ? "" : "s"} enrolled · move them before
-                        deleting
-                      </p>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#F0F0F0] px-4 py-2.5 dark:border-white/10">
+                    <p className="min-w-0 flex-1 text-[11.5px] text-black/45 dark:text-zinc-500">
+                      {meta.canDelete
+                        ? "No students enrolled · can be removed"
+                        : `${meta.blockedByStudents} student${meta.blockedByStudents === 1 ? "" : "s"} enrolled`}
+                    </p>
+                    {classTierActions(
+                      c,
+                      meta.normalized.className,
+                      meta.blockedByStudents,
+                      meta.canDelete,
                     )}
                   </div>
                 </article>
@@ -18508,27 +18705,27 @@ function ClassesCard({
           </div>
 
           <div className="mt-4 hidden overflow-x-auto rounded-lg border border-[#EFEFEF] lg:block dark:border-white/10">
-            <table className="w-full min-w-[720px] table-fixed border-collapse text-center">
+            <table className="w-full min-w-[880px] table-fixed border-collapse text-center">
               <colgroup>
-                <col className="w-[8%]" />
-                <col className="w-[14%]" />
-                <col className="w-[8%]" />
+                <col className="w-[6%]" />
                 <col className="w-[12%]" />
-                <col className="w-[14%]" />
-                <col className="w-[14%]" />
-                <col className="w-[18%]" />
+                <col className="w-[7%]" />
+                <col className="w-[10%]" />
                 <col className="w-[12%]" />
+                <col className="w-[12%]" />
+                <col className="w-[16%]" />
+                <col className="w-[25%]" />
               </colgroup>
               <thead>
                 <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:bg-white/5 dark:text-zinc-400">
                   <th className="px-2 py-2.5 font-semibold">Sl. No</th>
                   <th className="px-2 py-2.5 font-semibold">Class</th>
                   <th className="px-2 py-2.5 font-semibold">Div</th>
-                  <th className="px-2 py-2.5 font-semibold">No. of students</th>
+                  <th className="px-2 py-2.5 font-semibold">Students</th>
                   <th className="px-2 py-2.5 font-semibold">Total fee</th>
                   <th className="px-2 py-2.5 font-semibold">Term / month</th>
                   <th className="px-2 py-2.5 font-semibold">Class teacher</th>
-                  <th className="px-2 py-2.5 font-semibold">Action</th>
+                  <th className="px-2 py-2.5 text-right font-semibold">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -18542,7 +18739,7 @@ function ClassesCard({
                       <td className="px-2 py-2.5 align-middle font-mono text-black/60 dark:text-zinc-400">
                         {index + 1}
                       </td>
-                      <td className="px-2 py-2.5 align-middle font-semibold text-black dark:text-zinc-100">
+                      <td className="truncate px-2 py-2.5 align-middle font-semibold text-black dark:text-zinc-100">
                         {meta.grade}
                       </td>
                       <td className="px-2 py-2.5 align-middle text-black/80 dark:text-zinc-300">
@@ -18559,24 +18756,22 @@ function ClassesCard({
                           {meta.count}
                         </button>
                       </td>
-                      <td className="px-2 py-2.5 align-middle font-mono font-medium text-black dark:text-zinc-100">
+                      <td className="truncate px-2 py-2.5 align-middle font-mono font-medium text-black dark:text-zinc-100">
                         {formatMoney(meta.normalized.tuitionFeeAmount)}
                       </td>
-                      <td className="px-2 py-2.5 align-middle text-black/75 dark:text-zinc-300">
+                      <td className="truncate px-2 py-2.5 align-middle text-black/75 dark:text-zinc-300">
                         {termMonthLabel(c)}
                       </td>
                       <td className="truncate px-2 py-2.5 align-middle text-black/75 dark:text-zinc-300">
                         {meta.teacher || "—"}
                       </td>
                       <td className="px-2 py-2.5 align-middle">
-                        <div className="flex items-center justify-center">
-                          {classTierActions(
-                            c,
-                            meta.normalized.className,
-                            meta.blockedByStudents,
-                            meta.canDelete,
-                          )}
-                        </div>
+                        {classTierActions(
+                          c,
+                          meta.normalized.className,
+                          meta.blockedByStudents,
+                          meta.canDelete,
+                        )}
                       </td>
                     </tr>
                   );
@@ -18684,11 +18879,49 @@ function ClassesCard({
             <DialogTitle>{editingId ? "Edit Class Tier" : "Add Class Tier"}</DialogTitle>
             <DialogDescription>
               Set the class, then define installments and one-time fees. Totals prefill Finance ·
-              Receive Payment.
+              Receive Payment. Copy fees from another class when schedules match.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+              {configuredClasses.length > 0 ? (
+                <div className="space-y-1.5 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 p-3 dark:border-teal-900/40 dark:bg-teal-950/20">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-[#0F766E] dark:text-teal-300">
+                    Copy fees from
+                  </Label>
+                  <Select
+                    value={copyFromId || "__none__"}
+                    onValueChange={(id) => {
+                      if (id === "__none__") {
+                        setCopyFromId("");
+                        return;
+                      }
+                      const source = classes.find((row) => row.id === id);
+                      if (!source) return;
+                      setCopyFromId(id);
+                      applyScheduleCloneToForm(source);
+                      toast.success(`Fees copied from ${classScheduleLabel(source)}`);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 bg-white text-[13px] dark:bg-zinc-950">
+                      <SelectValue placeholder="Choose a class schedule…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Don’t copy</SelectItem>
+                      {configuredClasses
+                        .filter((row) => row.id !== editingId)
+                        .map((row) => (
+                          <SelectItem key={row.id} value={row.id}>
+                            {classScheduleLabel(row)}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-[#0F766E]/80 dark:text-teal-200/70">
+                    Replaces installment amounts and due dates. Class name and teacher stay yours.
+                  </p>
+                </div>
+              ) : null}
               <div className="space-y-3">
                 <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/45">
                   Class identity
@@ -19287,6 +19520,72 @@ function ClassesCard({
               </DialogFooter>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={applyOpen} onOpenChange={setApplyOpen}>
+        <DialogContent className="max-h-[85vh] overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white p-0 sm:max-w-md dark:border-white/10 dark:bg-zinc-900">
+          <DialogHeader className="border-b border-[#F0F0F0] px-5 py-4 dark:border-white/10">
+            <DialogTitle className="text-[17px] font-semibold">Apply schedule to classes</DialogTitle>
+            <DialogDescription className="text-[12.5px] text-black/55 dark:text-zinc-400">
+              {applySource
+                ? `Copy fees from ${classScheduleLabel(applySource)} onto the classes you select. Teachers and class names stay unchanged. Student dues will follow the new schedule.`
+                : "Select a source schedule first."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[min(22rem,50vh)] space-y-1 overflow-y-auto px-3 py-3">
+            {classes
+              .filter((row) => row.id !== applySource?.id)
+              .map((row) => {
+                const checked = applySelected.includes(row.id);
+                return (
+                  <label
+                    key={row.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-[#F0FDFA] dark:hover:bg-teal-950/30"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(value) => {
+                        setApplySelected((prev) =>
+                          value === true
+                            ? [...prev, row.id]
+                            : prev.filter((id) => id !== row.id),
+                        );
+                      }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-900 dark:text-zinc-100">
+                      {classScheduleLabel(row)}
+                    </span>
+                  </label>
+                );
+              })}
+            {classes.filter((row) => row.id !== applySource?.id).length === 0 ? (
+              <p className="px-2 py-6 text-center text-[13px] text-black/45">
+                No other classes in this year to apply to.
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter className="border-t border-[#F0F0F0] px-5 py-3 dark:border-white/10">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setApplyOpen(false)}
+              disabled={applyBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              disabled={applyBusy || applySelected.length === 0}
+              onClick={() => void runApplyToClasses()}
+            >
+              {applyBusy
+                ? "Applying…"
+                : `Apply to ${applySelected.length || ""} class${applySelected.length === 1 ? "" : "es"}`.trim()}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </OrganicCard>
@@ -20552,6 +20851,11 @@ function TransportCard({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransportRoute | null>(null);
   const [vehicleQuery, setVehicleQuery] = useState("");
+  const [copyFromId, setCopyFromId] = useState("");
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [applySource, setApplySource] = useState<TransportRoute | null>(null);
+  const [applySelected, setApplySelected] = useState<string[]>([]);
+  const [applyBusy, setApplyBusy] = useState(false);
   const routeImportRef = useRef<HTMLInputElement>(null);
   const [routeImportOpen, setRouteImportOpen] = useState(false);
   const [routeImporting, setRouteImporting] = useState(false);
@@ -20571,17 +20875,19 @@ function TransportCard({
     billingCycle: "Monthly" as Extract<ClassBillingCycle, "Monthly" | "Term">,
     feeAmountMode: "fixed" as ClassFeeAmountMode,
     feeCollectionStartMonth: defaultFeeCollectionStartMonth(feeTerms),
-    installmentCount: "12",
+    installmentCount: "10",
     installments: [] as RouteFeeDraftRow[],
     vehicleIds: [] as string[],
   });
 
-  const defaultInstallmentCount = (cycle: Extract<ClassBillingCycle, "Monthly" | "Term">) => {
-    const mode = cycle === "Term" ? "term" : "month";
-    const n = filterFeePeriods(feeTerms, mode, "vehicle").length;
-    if (n > 0) return String(n);
-    return cycle === "Term" ? "4" : "12";
-  };
+  const defaultInstallmentCount = (cycle: Extract<ClassBillingCycle, "Monthly" | "Term">) =>
+    String(cappedInstallmentCount(cycle, feeTerms, "vehicle"));
+
+  const configuredRoutes = useMemo(
+    () =>
+      transportRoutes.filter((r) => routeHasConfiguredSchedule(withRouteFeeSchedule(r, feeTerms))),
+    [transportRoutes, feeTerms],
+  );
 
   const ensureInstallmentRows = (
     prev: typeof form,
@@ -20651,8 +20957,11 @@ function TransportCard({
   const patchInstallmentRow = (index: number, patch: Partial<RouteFeeDraftRow>) => {
     setForm((prev) => {
       const count = Math.max(1, Math.floor(Number(prev.installmentCount) || 0));
-      const rows = ensureInstallmentRows(prev, count);
+      let rows = ensureInstallmentRows(prev, count);
       rows[index] = { ...rows[index], ...patch };
+      if (index === 0 && patch.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(patch.dueDate.trim())) {
+        rows = fillDueDatesFromFirst(rows, prev.billingCycle, true);
+      }
       const nextBoth =
         prev.feeAmountMode === "fixed" && patch.amount !== undefined ? patch.amount : prev.bothFee;
       return {
@@ -20663,6 +20972,40 @@ function TransportCard({
         installmentCount: String(rows.length),
       };
     });
+  };
+
+  const scheduleFieldsFromRoute = (source: TransportRoute) => {
+    const normalized = withRouteFeeSchedule(source, feeTerms);
+    const fee = routeFeePayloadFromSource(normalized);
+    const installments = (fee.bothFeeSchedule ?? []).filter((line) => line.kind === "installment");
+    const uniqueAmounts = [...new Set(installments.map((line) => line.amount))];
+    const cycle: Extract<ClassBillingCycle, "Monthly" | "Term"> =
+      fee.billingCycle === "Term" ? "Term" : "Monthly";
+    return {
+      morningFee: String(fee.morningFee || ""),
+      eveningFee: String(fee.eveningFee || ""),
+      bothFee: String(installments[0]?.amount || fee.bothFee || ""),
+      billingCycle: cycle,
+      feeAmountMode:
+        fee.feeAmountMode === "custom" || uniqueAmounts.length > 1
+          ? ("custom" as const)
+          : ("fixed" as const),
+      feeCollectionStartMonth:
+        fee.feeCollectionStartMonth?.trim() || defaultFeeCollectionStartMonth(feeTerms),
+      installmentCount: String(
+        installments.length || cappedInstallmentCount(cycle, feeTerms, "vehicle"),
+      ),
+      installments: installments.map((line) => ({
+        id: line.id,
+        label: line.label,
+        amount: line.amount ? String(line.amount) : "",
+        dueDate: line.dueDate ?? "",
+      })),
+    };
+  };
+
+  const applyScheduleCloneToRouteForm = (source: TransportRoute) => {
+    setForm((prev) => ({ ...prev, ...scheduleFieldsFromRoute(source) }));
   };
 
   const vehiclesForRoute = (routeId: string) =>
@@ -20738,41 +21081,90 @@ function TransportCard({
 
   const startCreate = () => {
     setEditingId(null);
+    setCopyFromId("");
     setVehicleQuery("");
     setForm(emptyForm());
     setOpen(true);
   };
 
-  const startEdit = (r: TransportRoute) => {
-    const normalized = withRouteFeeSchedule(r, feeTerms);
-    const cycle: Extract<ClassBillingCycle, "Monthly" | "Term"> =
-      normalized.billingCycle === "Term" ? "Term" : "Monthly";
-    const installments = normalized.bothFeeSchedule.filter((line) => line.kind === "installment");
-    const uniqueAmounts = [...new Set(installments.map((line) => line.amount))];
-    setEditingId(r.id);
+  const startDuplicate = (r: TransportRoute) => {
+    setEditingId(null);
+    setCopyFromId(r.id);
     setVehicleQuery("");
     setForm({
+      ...emptyForm(),
+      ...scheduleFieldsFromRoute(r),
+      mapFrom: "",
+      mapTo: "",
+      fromLat: null,
+      fromLng: null,
+      toLat: null,
+      toLng: null,
+      vehicleIds: [],
+    });
+    setOpen(true);
+    toast.message("Route fees copied", {
+      description: "Set pickup and drop points, then save.",
+    });
+  };
+
+  const openApplyRouteDialog = (r: TransportRoute) => {
+    setApplySource(withRouteFeeSchedule(r, feeTerms));
+    setApplySelected([]);
+    setApplyOpen(true);
+  };
+
+  const runApplyToRoutes = async () => {
+    if (!applySource || applySelected.length === 0 || applyBusy) return;
+    setApplyBusy(true);
+    const fee = routeFeePayloadFromSource(applySource);
+    let ok = 0;
+    let failed = 0;
+    for (const id of applySelected) {
+      const target = transportRoutes.find((row) => row.id === id);
+      if (!target || target.id === applySource.id) continue;
+      const updated: TransportRoute = {
+        ...target,
+        ...fee,
+        mapFrom: target.mapFrom,
+        mapTo: target.mapTo,
+        fromLat: target.fromLat,
+        fromLng: target.fromLng,
+        toLat: target.toLat,
+        toLng: target.toLng,
+      };
+      setTransportRoutes((prev) => prev.map((row) => (row.id === id ? updated : row)));
+      try {
+        await apiUpsertTransportRoute(updated);
+        ok += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    setApplyBusy(false);
+    setApplyOpen(false);
+    if (ok > 0) {
+      toast.success(`Applied fees to ${ok} route${ok === 1 ? "" : "s"}`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} route${failed === 1 ? "" : "s"} could not be updated`);
+    }
+  };
+
+  const startEdit = (r: TransportRoute) => {
+    const normalized = withRouteFeeSchedule(r, feeTerms);
+    setEditingId(r.id);
+    setCopyFromId("");
+    setVehicleQuery("");
+    setForm({
+      ...emptyForm(),
+      ...scheduleFieldsFromRoute(normalized),
       mapFrom: normalized.mapFrom,
       mapTo: normalized.mapTo,
       fromLat: normalized.fromLat ?? null,
       fromLng: normalized.fromLng ?? null,
       toLat: normalized.toLat ?? null,
       toLng: normalized.toLng ?? null,
-      morningFee: String(normalized.morningFee),
-      eveningFee: String(normalized.eveningFee),
-      bothFee: String(installments[0]?.amount || normalized.bothFee),
-      billingCycle: cycle,
-      feeAmountMode:
-        normalized.feeAmountMode === "custom" || uniqueAmounts.length > 1 ? "custom" : "fixed",
-      feeCollectionStartMonth:
-        normalized.feeCollectionStartMonth?.trim() || defaultFeeCollectionStartMonth(feeTerms),
-      installmentCount: String(installments.length || defaultInstallmentCount(cycle)),
-      installments: installments.map((line) => ({
-        id: line.id,
-        label: line.label,
-        amount: line.amount ? String(line.amount) : "",
-        dueDate: line.dueDate ?? "",
-      })),
       vehicleIds: vehiclesForRoute(r.id).map((v) => v.id),
     });
     setOpen(true);
@@ -21037,7 +21429,7 @@ function TransportCard({
       <CardHeader
         title="Transport Routes"
         info={ROUTES_TIP}
-        subtitle={`${transportRoutes.length} routes · morning, evening & both-shift fees`}
+        subtitle={`${transportRoutes.length} routes · Duplicate, Copy from, or Apply fees`}
         actionLabel="Add Route"
         onAction={startCreate}
         extraActions={
@@ -21150,24 +21542,6 @@ function TransportCard({
                       ) : null}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(r)}
-                      aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
-                      className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingDelete(r)}
-                      aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
-                      className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444]"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
                 </div>
                 <div className="mt-2.5 grid grid-cols-3 gap-2">
                   <div className="rounded-lg bg-white px-2.5 py-2">
@@ -21195,11 +21569,52 @@ function TransportCard({
                     </div>
                   </div>
                 </div>
-                <div
-                  className="mt-2 truncate text-[11px] text-black/45 dark:text-zinc-400"
-                  title={vehicleNames}
-                >
-                  {vehicleNames}
+                <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-[#EFEFEF] pt-2.5">
+                  <div
+                    className="min-w-0 flex-1 truncate text-[11px] text-black/45 dark:text-zinc-400"
+                    title={vehicleNames}
+                  >
+                    {vehicleNames}
+                  </div>
+                  <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(r)}
+                      aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
+                      title="Edit route"
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startDuplicate(r)}
+                      aria-label={`Duplicate fees for ${r.mapFrom} to ${r.mapTo}`}
+                      title="Duplicate fee schedule into a new route"
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#CCFBF1] bg-[#F0FDFA] text-[#0F766E]"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    {routeHasConfiguredSchedule(r) ? (
+                      <button
+                        type="button"
+                        onClick={() => openApplyRouteDialog(r)}
+                        aria-label={`Apply fees from ${r.mapFrom} to other routes`}
+                        title="Apply this schedule to other routes"
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400"
+                      >
+                        <Layers className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(r)}
+                      aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -21207,15 +21622,15 @@ function TransportCard({
         </div>
       ) : (
         <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
-          <table className="w-full min-w-[760px] table-fixed border-collapse text-left">
+          <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
             <colgroup>
+              <col className="w-[18%]" />
+              <col className="w-[18%]" />
+              <col className="w-[10%]" />
+              <col className="w-[10%]" />
+              <col className="w-[10%]" />
+              <col className="w-[14%]" />
               <col className="w-[20%]" />
-              <col className="w-[20%]" />
-              <col className="w-[11%]" />
-              <col className="w-[11%]" />
-              <col className="w-[11%]" />
-              <col className="w-[15%]" />
-              <col className="w-[12%]" />
             </colgroup>
             <thead>
               <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
@@ -21326,21 +21741,42 @@ function TransportCard({
                           {vehicleNames}
                         </span>
                       </td>
-                      <td className="px-3.5 py-2.5 align-middle">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="px-2 py-2.5 align-middle sm:px-3.5">
+                        <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1">
                           <button
                             type="button"
                             onClick={() => startEdit(r)}
                             aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
-                            className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                            title="Edit route"
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black dark:text-zinc-400"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
+                            onClick={() => startDuplicate(r)}
+                            aria-label={`Duplicate fees for ${r.mapFrom} to ${r.mapTo}`}
+                            title="Duplicate fee schedule into a new route"
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#CCFBF1] bg-[#F0FDFA] text-[#0F766E] transition-colors hover:border-[#5EEAD4] hover:bg-[#CCFBF1]"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                          {routeHasConfiguredSchedule(r) ? (
+                            <button
+                              type="button"
+                              onClick={() => openApplyRouteDialog(r)}
+                              aria-label={`Apply fees from ${r.mapFrom} to other routes`}
+                              title="Apply this schedule to other routes"
+                              className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E] dark:text-zinc-400"
+                            >
+                              <Layers className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
                             onClick={() => setPendingDelete(r)}
                             aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
-                            className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -21424,12 +21860,50 @@ function TransportCard({
             <DialogTitle>{editingId ? "Edit Route" : "Add Transport Route"}</DialogTitle>
             <DialogDescription className="text-[12.5px] leading-relaxed">
               Each route is a pickup → drop pair (same two points students pick as Bus Point 1 and
-              Bus Point 2). Set morning, evening, and both-shift fees. Search or pin each end on the
-              map.
+              Bus Point 2). Set morning, evening, and both-shift fees — or copy fees from another
+              route when amounts match.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6 sm:py-4">
+              {configuredRoutes.length > 0 ? (
+                <div className="space-y-1.5 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 p-3 dark:border-teal-900/40 dark:bg-teal-950/20">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-[#0F766E] dark:text-teal-300">
+                    Copy fees from
+                  </Label>
+                  <Select
+                    value={copyFromId || "__none__"}
+                    onValueChange={(id) => {
+                      if (id === "__none__") {
+                        setCopyFromId("");
+                        return;
+                      }
+                      const source = transportRoutes.find((row) => row.id === id);
+                      if (!source) return;
+                      setCopyFromId(id);
+                      applyScheduleCloneToRouteForm(source);
+                      toast.success(`Fees copied from ${routeScheduleLabel(source)}`);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 bg-white text-[13px] dark:bg-zinc-950">
+                      <SelectValue placeholder="Choose a route schedule…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Don’t copy</SelectItem>
+                      {configuredRoutes
+                        .filter((row) => row.id !== editingId)
+                        .map((row) => (
+                          <SelectItem key={row.id} value={row.id}>
+                            {routeScheduleLabel(row)}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-[#0F766E]/80 dark:text-teal-200/70">
+                    Replaces shift fees and installment dates. Map points stay yours.
+                  </p>
+                </div>
+              ) : null}
               <p className="-mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
                 Pickup & drop points
                 <InfoTip content={ROUTE_POINTS_TIP} className="-my-1" />
@@ -21969,6 +22443,72 @@ function TransportCard({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={applyOpen} onOpenChange={setApplyOpen}>
+        <DialogContent className="max-h-[85vh] overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white p-0 sm:max-w-md dark:border-white/10 dark:bg-zinc-900">
+          <DialogHeader className="border-b border-[#F0F0F0] px-5 py-4 dark:border-white/10">
+            <DialogTitle className="text-[17px] font-semibold">Apply fees to routes</DialogTitle>
+            <DialogDescription className="text-[12.5px] text-black/55 dark:text-zinc-400">
+              {applySource
+                ? `Copy fees from ${routeScheduleLabel(applySource)} onto the routes you select. Map points and vehicles stay unchanged.`
+                : "Select a source schedule first."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[min(22rem,50vh)] space-y-1 overflow-y-auto px-3 py-3">
+            {transportRoutes
+              .filter((row) => row.id !== applySource?.id)
+              .map((row) => {
+                const checked = applySelected.includes(row.id);
+                return (
+                  <label
+                    key={row.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-[#F0FDFA] dark:hover:bg-teal-950/30"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(value) => {
+                        setApplySelected((prev) =>
+                          value === true
+                            ? [...prev, row.id]
+                            : prev.filter((id) => id !== row.id),
+                        );
+                      }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-900 dark:text-zinc-100">
+                      {routeScheduleLabel(row)}
+                    </span>
+                  </label>
+                );
+              })}
+            {transportRoutes.filter((row) => row.id !== applySource?.id).length === 0 ? (
+              <p className="px-2 py-6 text-center text-[13px] text-black/45">
+                No other routes in this year to apply to.
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter className="border-t border-[#F0F0F0] px-5 py-3 dark:border-white/10">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setApplyOpen(false)}
+              disabled={applyBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              disabled={applyBusy || applySelected.length === 0}
+              onClick={() => void runApplyToRoutes()}
+            >
+              {applyBusy
+                ? "Applying…"
+                : `Apply to ${applySelected.length || ""} route${applySelected.length === 1 ? "" : "s"}`.trim()}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </OrganicCard>

@@ -467,9 +467,9 @@ export function firstAllowedTenantPath(
     typeof staffId === "string" && staffId.trim()
       ? `/tenant/staff?id=${encodeURIComponent(staffId.trim())}`
       : null;
-  // Staff Login as should open that person's profile, not the full directory.
-  if (selfStaffPath && hasPermission(permissions, "staff")) {
-    return selfStaffPath;
+  // Staff Login as (class teacher): open assigned students first — same idea as parent Login as.
+  if (staffId && hasPermission(permissions, "students")) {
+    return "/tenant/students";
   }
   if (hasPermission(permissions, "dashboard") || hasFullAccess(permissions)) {
     return "/tenant/dashboard";

@@ -133,6 +133,10 @@ import {
 import { StudentAttendanceTab } from "@/components/school/attendance/StudentAttendanceTab";
 import { StudentYearPlacement } from "@/components/school/StudentYearPlacement";
 import { StudentParentsAppPanel } from "@/components/school/StudentParentsAppPanel";
+import { ApiError } from "@/lib/api/client";
+import { schoolParentAction, schoolParents, type SchoolParent } from "@/lib/api/school-family";
+import { clearFamilyPreviewHandoff, stageFamilyPreview } from "@/lib/api/family";
+import { isEmbeddedWebView } from "@/lib/native-download";
 import { planAllowsStudentAttendance } from "@/lib/permissions";
 import { cn, glassCardClass } from "@/lib/utils";
 import { formatDobDisplay } from "@/lib/dates";
@@ -475,6 +479,7 @@ export function StudentProfileDetail({
   );
   const [shareOpen, setShareOpen] = useState(false);
   const [shareToken, setShareToken] = useState(student.shareToken ?? "");
+  const [loginAsBusy, setLoginAsBusy] = useState(false);
   const activeTab: StudentProfileTabId =
     isStudentProfileTab(search.tab) &&
     (search.tab !== "attendance" || planAllowsStudentAttendance(session?.planFlags))
@@ -840,6 +845,73 @@ export function StudentProfileDetail({
     });
   };
 
+  /** Same pattern as staff Login as / Parents app — open the family app for this student. */
+  const openStudentLoginAs = async () => {
+    if (loginAsBusy) return;
+    setLoginAsBusy(true);
+    const returnPath = `${window.location.pathname}${window.location.search}`;
+    const sameWindow = isEmbeddedWebView();
+    const tab = sameWindow ? null : window.open("", "_blank");
+    if (!sameWindow && !tab) {
+      toast.message("Opening in this screen", {
+        description: "Pop-ups are blocked on this device.",
+      });
+    }
+    try {
+      const data = await schoolParents("", student.id);
+      const parents = (data.parents ?? []).filter((parent: SchoolParent) =>
+        parent.students.some((item) => item.id === student.id),
+      );
+      const parent = parents.find((p) => p.active) ?? parents[0];
+      if (!parent) {
+        tab?.close();
+        toast.message("No parent account yet", {
+          description: "Set one up on the Parents app tab, then use Login as.",
+        });
+        setActiveTab("parents-app");
+        return;
+      }
+      if (!parent.active) {
+        tab?.close();
+        toast.error("Parent account is inactive", {
+          description: "Activate it on the Parents app tab first.",
+        });
+        setActiveTab("parents-app");
+        return;
+      }
+      const result = await schoolParentAction({ action: "impersonate", id: parent.id });
+      if (!result.token) throw new Error("Could not open the parent app");
+      const useSameWindow = sameWindow || !tab;
+      stageFamilyPreview({
+        token: result.token,
+        refreshToken: result.refreshToken,
+        name: parent.name || student.guardian || "Parent",
+        returnPath: returnPath.startsWith("/tenant") ? returnPath : "/tenant/students",
+        sameWindow: useSameWindow,
+      });
+      if (useSameWindow) {
+        toast.success(`Opening ${parent.name || "the parent"}'s family app`);
+        window.location.assign("/family");
+        return;
+      }
+      tab.location.replace("/family");
+      try {
+        tab.opener = null;
+      } catch {
+        // Exit preview still returns to the school workspace.
+      }
+      toast.success(`Opening ${parent.name || "the parent"}'s family app`, {
+        description: "New tab · your school login stays here",
+      });
+    } catch (err) {
+      clearFamilyPreviewHandoff();
+      tab?.close();
+      toast.error(err instanceof ApiError ? err.message : "Could not open Login as");
+    } finally {
+      setLoginAsBusy(false);
+    }
+  };
+
   const openBulkWhatsApp = () => {
     if (openBalanceLines.length === 0) {
       toast.error("Nothing due to remind", {
@@ -1012,6 +1084,21 @@ export function StudentProfileDetail({
             >
               <ClipboardList className="h-4 w-4" />
               Collect
+            </button>
+            <button
+              type="button"
+              onClick={() => void openStudentLoginAs()}
+              disabled={loginAsBusy}
+              aria-label={`Login as parent for ${student.name}`}
+              title="Open this student's parent family app in a new tab"
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-4 text-[13px] font-semibold text-[#0F766E] shadow-sm transition-colors hover:border-[#5EEAD4] hover:bg-[#CCFBF1] disabled:opacity-60"
+            >
+              {loginAsBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ExternalLink className="h-4 w-4" />
+              )}
+              Login as
             </button>
             <button
               type="button"
