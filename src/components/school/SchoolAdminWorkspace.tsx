@@ -18488,15 +18488,20 @@ function ClassesCard({
       setClasses((prev) => [...prev, created]);
       void apiUpsertClass(created)
         .then((saved) => {
-          if (!saved?.id) return;
+          const finalId = saved?.id || nextId;
           setClasses((prev) =>
-            prev.map((c) => (c.id === created.id || c.id === saved.id ? { ...c, ...saved } : c)),
+            prev.map((c) =>
+              c.id === created.id || c.id === finalId ? { ...c, ...created, ...saved, id: finalId } : c,
+            ),
           );
+          toast.success(`${className} added`, {
+            description: `${formatMoney(next.tuitionFeeAmount)} · ${scheduleSummary({ ...created, id: finalId })}`,
+          });
         })
-        .catch((err) => toast.error(err instanceof Error ? err.message : "Could not sync class"));
-      toast.success(`${className} added`, {
-        description: `${formatMoney(next.tuitionFeeAmount)} · ${scheduleSummary(created)}`,
-      });
+        .catch((err) => {
+          setClasses((prev) => prev.filter((c) => c.id !== nextId));
+          toast.error(err instanceof Error ? err.message : "Could not sync class");
+        });
     }
     setOpen(false);
   };
@@ -20047,18 +20052,40 @@ function VehicleCard({
     if (editingId) {
       const updated: TransportVehicle = { id: editingId, ...payload };
       setTransportVehicles((prev) => prev.map((v) => (v.id === editingId ? updated : v)));
-      void apiUpsertVehicle(updated).catch((err) =>
-        toast.error(err instanceof Error ? err.message : "Could not sync vehicle"),
-      );
-      toast.success(`${name} updated`);
+      void apiUpsertVehicle(updated)
+        .then((saved) => {
+          setTransportVehicles((prev) =>
+            prev.map((v) =>
+              v.id === editingId ? { ...updated, ...saved, id: saved.id || editingId } : v,
+            ),
+          );
+          toast.success(`${name} updated`);
+        })
+        .catch((err) =>
+          toast.error(err instanceof Error ? err.message : "Could not sync vehicle"),
+        );
     } else {
-      const nextId = `VH-${(transportVehicles.length + 1).toString().padStart(3, "0")}`;
+      const nextId = nextPrefixedId(
+        "VH",
+        transportVehicles.map((v) => v.id),
+        3,
+      );
       const created: TransportVehicle = { id: nextId, ...payload };
       setTransportVehicles((prev) => [...prev, created]);
-      void apiUpsertVehicle(created).catch((err) =>
-        toast.error(err instanceof Error ? err.message : "Could not sync vehicle"),
-      );
-      toast.success(`${name} added to fleet`);
+      void apiUpsertVehicle(created)
+        .then((saved) => {
+          const finalId = saved.id || nextId;
+          setTransportVehicles((prev) =>
+            prev.map((v) =>
+              v.id === nextId || v.id === finalId ? { ...created, ...saved, id: finalId } : v,
+            ),
+          );
+          toast.success(`${name} added to fleet`);
+        })
+        .catch((err) => {
+          setTransportVehicles((prev) => prev.filter((v) => v.id !== nextId));
+          toast.error(err instanceof Error ? err.message : "Could not sync vehicle");
+        });
     }
     setOpen(false);
   };
@@ -21414,20 +21441,40 @@ function TransportCard({
       if (form.toLat == null) delete updated.toLat;
       if (form.toLng == null) delete updated.toLng;
       setTransportRoutes((prev) => prev.map((r) => (r.id !== editingId ? r : updated)));
-      void apiUpsertTransportRoute(updated).catch((err) =>
-        toast.error(err instanceof Error ? err.message : "Could not sync route"),
-      );
-      syncRouteVehicles(editingId, form.vehicleIds);
-      toast.success(`Route updated · ${mapFrom} → ${mapTo}`);
+      void apiUpsertTransportRoute(updated)
+        .then((saved) => {
+          setTransportRoutes((prev) =>
+            prev.map((r) => (r.id === editingId ? { ...updated, ...saved, id: saved.id || editingId } : r)),
+          );
+          syncRouteVehicles(saved.id || editingId, form.vehicleIds);
+          toast.success(`Route updated · ${mapFrom} → ${mapTo}`);
+        })
+        .catch((err) =>
+          toast.error(err instanceof Error ? err.message : "Could not sync route"),
+        );
     } else {
-      const nextId = `TR-${(transportRoutes.length + 1).toString().padStart(3, "0")}`;
-      const created = { id: nextId, ...payload };
-      setTransportRoutes((prev) => [...prev, created]);
-      void apiUpsertTransportRoute(created).catch((err) =>
-        toast.error(err instanceof Error ? err.message : "Could not sync route"),
+      const nextId = nextPrefixedId(
+        "TR",
+        transportRoutes.map((r) => r.id),
+        3,
       );
-      syncRouteVehicles(nextId, form.vehicleIds);
-      toast.success(`Route added · ${mapFrom} → ${mapTo}`);
+      const created: TransportRoute = { id: nextId, ...payload };
+      setTransportRoutes((prev) => [...prev, created]);
+      void apiUpsertTransportRoute(created)
+        .then((saved) => {
+          const finalId = saved.id || nextId;
+          setTransportRoutes((prev) =>
+            prev.map((r) =>
+              r.id === nextId || r.id === finalId ? { ...created, ...saved, id: finalId } : r,
+            ),
+          );
+          syncRouteVehicles(finalId, form.vehicleIds);
+          toast.success(`Route added · ${mapFrom} → ${mapTo}`);
+        })
+        .catch((err) => {
+          setTransportRoutes((prev) => prev.filter((r) => r.id !== nextId));
+          toast.error(err instanceof Error ? err.message : "Could not sync route");
+        });
     }
     setOpen(false);
   };

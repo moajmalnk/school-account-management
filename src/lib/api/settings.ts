@@ -17,6 +17,24 @@ function hasToken() {
   return Boolean(getApiToken());
 }
 
+function isDuplicateKeyError(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  if (err.status === 409) return true;
+  return /duplicate entry|integrity constraint/i.test(err.message);
+}
+
+/** POST again without id so the server can mint a free public_id. */
+async function postWithoutClientId<T extends { id?: string }>(
+  path: string,
+  body: T,
+): Promise<T> {
+  const { id: _ignored, ...rest } = body;
+  return apiRequest<T>(path, {
+    method: "POST",
+    body: { ...rest, id: "" },
+  });
+}
+
 function isDataUrl(value?: string | null): boolean {
   return typeof value === "string" && value.startsWith("data:");
 }
@@ -192,10 +210,15 @@ export async function apiUpsertClass(cls: ClassConfig): Promise<ClassConfig> {
       body: cls,
     });
   }
-  return apiRequest<ClassConfig>("/api/settings/classes.php", {
-    method: "POST",
-    body: cls,
-  });
+  try {
+    return await apiRequest<ClassConfig>("/api/settings/classes.php", {
+      method: "POST",
+      body: cls,
+    });
+  } catch (err) {
+    if (!isDuplicateKeyError(err)) throw err;
+    return postWithoutClientId("/api/settings/classes.php", cls);
+  }
 }
 
 export async function apiDeleteClass(id: string): Promise<void> {
@@ -326,10 +349,15 @@ export async function apiUpsertTransportRoute(route: TransportRoute): Promise<Tr
       body: route,
     });
   }
-  return apiRequest<TransportRoute>("/api/settings/transport.php", {
-    method: "POST",
-    body: route,
-  });
+  try {
+    return await apiRequest<TransportRoute>("/api/settings/transport.php", {
+      method: "POST",
+      body: route,
+    });
+  } catch (err) {
+    if (!isDuplicateKeyError(err)) throw err;
+    return postWithoutClientId("/api/settings/transport.php", route);
+  }
 }
 
 export async function apiDeleteTransportRoute(id: string): Promise<void> {
@@ -349,10 +377,15 @@ export async function apiUpsertVehicle(vehicle: TransportVehicle): Promise<Trans
       body: vehicle,
     });
   }
-  return apiRequest<TransportVehicle>("/api/settings/transport.php?type=vehicles", {
-    method: "POST",
-    body: vehicle,
-  });
+  try {
+    return await apiRequest<TransportVehicle>("/api/settings/transport.php?type=vehicles", {
+      method: "POST",
+      body: vehicle,
+    });
+  } catch (err) {
+    if (!isDuplicateKeyError(err)) throw err;
+    return postWithoutClientId("/api/settings/transport.php?type=vehicles", vehicle);
+  }
 }
 
 export async function apiDeleteVehicle(id: string): Promise<void> {

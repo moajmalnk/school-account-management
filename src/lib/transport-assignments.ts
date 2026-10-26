@@ -91,6 +91,8 @@ export function applyVehicleAssignment(
   if (!draft.assigned) {
     const clearingThisBus = !student.vehicleId || student.vehicleId === vehicleId;
     if (!clearingThisBus) return student;
+    // needsBus:false is the clear signal — apiUpsertStudent sends null transport fields
+    // (JSON drops undefined, which left vehicle_id stuck in the DB).
     return normalizeStudent({
       ...student,
       needsBus: false,

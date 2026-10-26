@@ -45,6 +45,22 @@ async function mutate<T>(
  * Default: update first (edits), create on 404.
  * createOnly: insert only — on duplicate public_id, let the server allocate a new id.
  */
+/**
+ * JSON.stringify drops `undefined`, so cleared transport fields never reach the API
+ * and update.php keeps the previous vehicle_id / stops. Always send nulls for clears.
+ */
+function studentWritePayload(student: Student): Record<string, unknown> {
+  const clearingBus = student.needsBus === false;
+  return {
+    ...student,
+    needsBus: clearingBus ? false : student.needsBus,
+    vehicleId: clearingBus ? null : (student.vehicleId ?? null),
+    busPoint1: clearingBus ? null : (student.busPoint1 ?? null),
+    busPoint2: clearingBus ? null : (student.busPoint2 ?? null),
+    transportShift: clearingBus ? null : (student.transportShift ?? null),
+  };
+}
+
 export async function apiUpsertStudent(
   student: Student,
   opts?: { createOnly?: boolean },
@@ -52,7 +68,7 @@ export async function apiUpsertStudent(
   if (!hasToken()) {
     throw new Error("Not signed in to API — log in again to save student changes");
   }
-  const payload = await withUploadedPhoto(student);
+  const payload = studentWritePayload(await withUploadedPhoto(student));
 
   if (opts?.createOnly) {
     try {

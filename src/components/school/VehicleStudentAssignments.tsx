@@ -314,7 +314,21 @@ export function VehicleStudentAssignments({
       const saved: Student[] = [];
       for (const next of changes) {
         const remote = await apiUpsertStudent(next);
-        const merged = { ...next, ...remote, id: next.id };
+        // Prefer cleared local transport when unassigning — never let a stale
+        // remote vehicleId resurrect the assignment in the UI.
+        const merged =
+          next.needsBus === false
+            ? {
+                ...remote,
+                ...next,
+                id: next.id,
+                needsBus: false,
+                vehicleId: undefined,
+                busPoint1: undefined,
+                busPoint2: undefined,
+                transportShift: undefined,
+              }
+            : { ...next, ...remote, id: next.id };
         saved.push(merged);
         upsertStudentInSnapshot(merged);
       }
