@@ -76,11 +76,13 @@ import { useTenantNavigationGuard } from "@/components/school/settings-unsaved-g
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 import {
   endImpersonation,
+  isStaffSelfPreviewSession,
   sessionAllowedBranchIds,
   sessionCanAccessBranch,
   sessionCanAccessSettings,
   sessionHasAnyFinance,
   sessionHasPermission,
+  sessionStaffClassScopeId,
   useAuth,
 } from "@/lib/auth";
 import { defaultClosingMonthKey, suggestNextBooksMonthKey } from "@/lib/academic-year";
@@ -734,7 +736,17 @@ export function TenantMacDock({
   const showCollapse = isVertical;
   const expanded = isVertical && !collapsed;
 
-  const visibleNav = useMemo(() => NAV.filter((item) => navAllowed(item.to, session)), [session]);
+  const staffNavHome =
+    Boolean(sessionStaffClassScopeId(session)) || isStaffSelfPreviewSession(session);
+  const visibleNav = useMemo(
+    () =>
+      NAV.filter((item) => navAllowed(item.to, session)).map((item) =>
+        staffNavHome && item.to === "/tenant/staff"
+          ? { ...item, label: "My Profile" }
+          : item,
+      ),
+    [session, staffNavHome],
+  );
   const { onGuardedLinkClick } = useTenantNavigationGuard();
 
   const floatingItems = useMemo<FloatingDockItem[]>(

@@ -850,7 +850,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
             <StaffPhotoAvatar staff={staff} onPhotoChange={updatePhoto} size="lg" />
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Staff profile
+                {isOwnStaffView ? "My profile" : "Staff profile"}
               </p>
               <h1 className="mt-1 truncate text-[1.65rem] font-semibold tracking-tight text-slate-950 dark:text-zinc-50 sm:text-[1.85rem]">
                 {staff.name}

@@ -114,6 +114,7 @@ export function MarkStaffAttendanceModal({
   roster,
   departments,
   initialDepartment = "all",
+  selfOnly = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -121,6 +122,8 @@ export function MarkStaffAttendanceModal({
   roster: Staff[];
   departments: string[];
   initialDepartment?: string;
+  /** Class teacher / Login as — mark only their own row. */
+  selfOnly?: boolean;
 }) {
   const { setStaff } = useTenantStore();
   const [department, setDepartment] = useState(initialDepartment);
@@ -310,15 +313,21 @@ export function MarkStaffAttendanceModal({
         <DialogContent className="flex max-h-[min(92dvh,880px)] w-[min(100vw-1.5rem,760px)] max-w-3xl flex-col gap-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-0 dark:border-white/10 dark:bg-[#121212]">
           <DialogHeader className="shrink-0 border-b border-slate-100 px-5 py-4 dark:border-white/10">
             <DialogTitle className="text-[18px] font-semibold text-slate-900 dark:text-zinc-50">
-              Mark staff attendance
+              {selfOnly ? "Mark my attendance" : "Mark staff attendance"}
             </DialogTitle>
             <DialogDescription className="text-[13px] text-slate-500 dark:text-zinc-400">
-              {monthLabel} · unrecorded staff start fully present. Enter leave only where needed,
-              then save.
+              {selfOnly
+                ? `${monthLabel} · set working days and leave for your month, then save.`
+                : `${monthLabel} · unrecorded staff start fully present. Enter leave only where needed, then save.`}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid shrink-0 grid-cols-1 gap-3 border-b border-slate-100 px-5 py-3 sm:grid-cols-3 dark:border-white/10">
+          <div
+            className={cn(
+              "grid shrink-0 gap-3 border-b border-slate-100 px-5 py-3 dark:border-white/10",
+              selfOnly ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-3",
+            )}
+          >
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 Working days
@@ -339,39 +348,43 @@ export function MarkStaffAttendanceModal({
                 </p>
               )}
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Department
-              </Label>
-              <Select value={department} onValueChange={setDepartment}>
-                <SelectTrigger className="h-10 rounded-xl" aria-label="Department">
-                  <SelectValue placeholder="All departments" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All departments</SelectItem>
-                  {departments.map((name) => (
-                    <SelectItem key={name} value={name}>
-                      {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Search
-              </Label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Name, ID, or role"
-                  className="h-10 rounded-xl pl-9"
-                  aria-label="Search staff in this month"
-                />
-              </div>
-            </div>
+            {!selfOnly ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Department
+                  </Label>
+                  <Select value={department} onValueChange={setDepartment}>
+                    <SelectTrigger className="h-10 rounded-xl" aria-label="Department">
+                      <SelectValue placeholder="All departments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All departments</SelectItem>
+                      {departments.map((name) => (
+                        <SelectItem key={name} value={name}>
+                          {name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Search
+                  </Label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Name, ID, or role"
+                      className="h-10 rounded-xl pl-9"
+                      aria-label="Search staff in this month"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : null}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 sm:px-3">

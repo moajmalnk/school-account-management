@@ -34,6 +34,11 @@ import { formatDownloadFilename } from "@/lib/download-names";
 import { downloadBlobFile } from "@/lib/finance-export";
 import { buildXlsxBlob } from "@/lib/xlsx-workbook";
 import {
+  isStaffSelfPreviewSession,
+  sessionStaffClassScopeId,
+  useAuth,
+} from "@/lib/auth";
+import {
   currentPayrollMonth,
   formatPayrollMonthLabel,
   getStaffAttendanceForMonth,
@@ -109,6 +114,11 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
 
 export function StaffAttendancePanel() {
   const { activeStaff, setStaff, activeDepartments, schoolDetails } = useTenantStore();
+  const { session } = useAuth();
+  const selfStaffId =
+    sessionStaffClassScopeId(session) ||
+    (isStaffSelfPreviewSession(session) ? session?.staffId?.trim() || null : null);
+  const selfOnly = Boolean(selfStaffId);
   const [month, setMonth] = useState(currentPayrollMonth);
   const [department, setDepartment] = useState("all");
   const [query, setQuery] = useState("");
@@ -119,13 +129,13 @@ export function StaffAttendancePanel() {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const roster = useMemo(
-    () =>
-      activeStaff
-        .filter((member) => member.active && !member.deletedAt)
-        .sort((a, b) => a.name.localeCompare(b.name, "en")),
-    [activeStaff],
-  );
+  const roster = useMemo(() => {
+    const live = activeStaff
+      .filter((member) => member.active && !member.deletedAt)
+      .sort((a, b) => a.name.localeCompare(b.name, "en"));
+    if (!selfStaffId) return live;
+    return live.filter((member) => member.id === selfStaffId);
+  }, [activeStaff, selfStaffId]);
 
   const departments = useMemo(() => {
     const names = new Set<string>();
@@ -271,57 +281,76 @@ export function StaffAttendancePanel() {
           onClick={() => setBulkOpen(true)}
         >
           <UserCheck className="mr-1.5 h-4 w-4 shrink-0" />
-          <span className="truncate">Mark staff</span>
+          <span className="truncate">{selfOnly ? "Mark my attendance" : "Mark staff"}</span>
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-10 w-full rounded-full px-4"
-          onClick={() => setUploadOpen(true)}
-        >
-          <Upload className="mr-1.5 h-4 w-4 shrink-0" />
-          Upload
-        </Button>
+        {!selfOnly ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-full rounded-full px-4"
+            onClick={() => setUploadOpen(true)}
+          >
+            <Upload className="mr-1.5 h-4 w-4 shrink-0" />
+            Upload
+          </Button>
+        ) : null}
       </AttendanceActions>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryStat label="Staff" value={String(rows.length)} />
+      <div className={cn("grid gap-3", selfOnly ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 lg:grid-cols-4")}>
+        <SummaryStat label={selfOnly ? "My month" : "Staff"} value={selfOnly ? formatPayrollMonthLabel(month) : String(rows.length)} />
         <SummaryStat label="Recorded" value={String(recorded.length)} />
-        <SummaryStat label="Not recorded" value={String(rows.length - recorded.length)} />
-        <SummaryStat label="Average attendance" value={average === null ? "—" : `${average}%`} />
+        {!selfOnly ? (
+          <SummaryStat label="Not recorded" value={String(rows.length - recorded.length)} />
+        ) : (
+          <SummaryStat
+            label="Status"
+            value={recorded.length > 0 ? `${average ?? 0}%` : "Not recorded"}
+          />
+        )}
+        {!selfOnly ? (
+          <SummaryStat label="Average attendance" value={average === null ? "—" : `${average}%`} />
+        ) : null}
       </div>
 
       <section className={cn(glassCardClass, "p-4 sm:p-5")}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name, ID, or role"
-              className="h-10 rounded-xl pl-9"
-              aria-label="Search staff"
-            />
+        {!selfOnly ? (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search name, ID, or role"
+                className="h-10 rounded-xl pl-9"
+                aria-label="Search staff"
+              />
+            </div>
+            <Select value={department} onValueChange={setDepartment}>
+              <SelectTrigger className="h-10 w-full rounded-xl sm:w-56" aria-label="Department">
+                <SelectValue placeholder="Department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All departments</SelectItem>
+                {departments.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Select value={department} onValueChange={setDepartment}>
-            <SelectTrigger className="h-10 w-full rounded-xl sm:w-56" aria-label="Department">
-              <SelectValue placeholder="Department" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All departments</SelectItem>
-              {departments.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        ) : (
+          <div className="text-[13px] font-semibold text-slate-900 dark:text-zinc-50">
+            My attendance · {formatPayrollMonthLabel(month)}
+          </div>
+        )}
 
         {rows.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-[13px] text-slate-500 dark:border-white/15 dark:text-zinc-400">
             {roster.length === 0
-              ? "No active staff in this academic year."
+              ? selfOnly
+                ? "Your staff profile is not linked for this year."
+                : "No active staff in this academic year."
               : "No staff match this search or department."}
           </div>
         ) : (
@@ -477,6 +506,7 @@ export function StaffAttendancePanel() {
         roster={roster}
         departments={departments}
         initialDepartment={department}
+        selfOnly={selfOnly}
       />
 
       <Dialog open={Boolean(editing)} onOpenChange={(open) => (open ? null : requestClose())}>

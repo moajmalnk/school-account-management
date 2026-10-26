@@ -54,11 +54,13 @@ import {
 } from "@/components/layout/MobileTabBar";
 import {
   useAuth,
+  isStaffSelfPreviewSession,
   isTenantWorkspaceSession,
   sessionAllowedBranchIds,
   sessionCanAccessSettings,
   sessionHasAnyFinance,
   sessionHasPermission,
+  sessionStaffClassScopeId,
 } from "@/lib/auth";
 import { apiMe } from "@/lib/api/auth";
 import { resolveMediaUrl } from "@/lib/media";
@@ -267,13 +269,15 @@ function TenantMobileHeader() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
   const onNotifications = pathname.startsWith("/tenant/notifications");
+  const staffNavHome =
+    Boolean(sessionStaffClassScopeId(session)) || isStaffSelfPreviewSession(session);
   const NAV_LABELS: Record<string, string> = {
     "/tenant/dashboard": "Home",
     "/tenant/students": "Students",
     "/tenant/parents": "Parents",
     "/tenant/attendance": "Attendance",
     "/tenant/academics": "Academics",
-    "/tenant/staff": "Staff",
+    "/tenant/staff": staffNavHome ? "My Profile" : "Staff",
     "/tenant/finance": "Finance",
     "/tenant/support": "Support",
     "/tenant/settings": "Settings",
@@ -418,6 +422,8 @@ function TenantMobileHeader() {
 function TenantMobileNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { session } = useAuth();
+  const staffNavHome =
+    Boolean(sessionStaffClassScopeId(session)) || isStaffSelfPreviewSession(session);
   const items = MOBILE_TABS.filter((tab) => {
     if (tab.to.startsWith("/tenant/dashboard")) return sessionHasPermission(session, "dashboard");
     if (tab.to.startsWith("/tenant/students")) return sessionHasPermission(session, "students");
@@ -431,6 +437,8 @@ function TenantMobileNav() {
     if (tab.to.startsWith("/tenant/finance")) return sessionHasAnyFinance(session);
     if (tab.to.startsWith("/tenant/settings")) return sessionCanAccessSettings(session);
     return true;
-  });
+  }).map((tab) =>
+    staffNavHome && tab.to === "/tenant/staff" ? { ...tab, label: "My Profile" } : tab,
+  );
   return <MobileTabBar items={items} pathname={pathname} className="md:hidden" />;
 }

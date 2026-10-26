@@ -70,7 +70,11 @@ import {
 import { formatDownloadFilename } from "@/lib/download-names";
 import { downloadBlobFile } from "@/lib/finance-export";
 import { buildXlsxBlob } from "@/lib/xlsx-workbook";
-import { sessionStaffClassScopeId, useAuth } from "@/lib/auth";
+import {
+  isStaffSelfPreviewSession,
+  sessionStaffClassScopeId,
+  useAuth,
+} from "@/lib/auth";
 import {
   assignedClassNamesForStaff,
   studentInAssignedClasses,
@@ -262,7 +266,57 @@ function StudentAttendanceBoard() {
     setLoading(true);
     try {
       const data = await apiAttendanceSummary(date);
-      setSummary(data);
+      if (!classScopeStaffId) {
+        setSummary(data);
+        return;
+      }
+      // Class teacher: rebuild today's cards from their assigned roster only.
+      const day = await apiAttendanceDay({ date });
+      const scopedStudents =
+        assignedClassNames.length > 0
+          ? day.students.filter((s) => studentInAssignedClasses(s.cls, assignedClassNames))
+          : [];
+      const enrolled = Math.max(students.length, scopedStudents.length);
+      const counts = {
+        present: 0,
+        absent: 0,
+        halfday: 0,
+        late: 0,
+        leave: 0,
+        unmarked: 0,
+        total: enrolled,
+      };
+      for (const row of scopedStudents) {
+        if (row.status === "present") counts.present += 1;
+        else if (row.status === "absent") counts.absent += 1;
+        else if (row.status === "halfday") counts.halfday += 1;
+        else if (row.status === "late") counts.late += 1;
+        else if (row.status === "leave") counts.leave += 1;
+        else counts.unmarked += 1;
+      }
+      if (scopedStudents.length < enrolled) {
+        counts.unmarked += enrolled - scopedStudents.length;
+      }
+      const markedPresent = counts.present + counts.halfday + counts.late;
+      const presentPercent =
+        enrolled > 0 ? Math.round((markedPresent / enrolled) * 100) : 0;
+      const notPresent = scopedStudents
+        .filter((s) => s.status && s.status !== "present")
+        .map((s) => ({
+          studentId: s.studentId,
+          name: s.name,
+          cls: s.cls,
+          status: s.status as StudentAttendanceStatus,
+          phone: s.phone,
+          guardian: s.guardian,
+        }));
+      setSummary({
+        ...data,
+        enrolled,
+        counts,
+        presentPercent,
+        notPresent,
+      });
     } catch (err) {
       toast.error("Could not load attendance", {
         description: err instanceof Error ? err.message : "Try again",
@@ -271,7 +325,7 @@ function StudentAttendanceBoard() {
     } finally {
       setLoading(false);
     }
-  }, [date]);
+  }, [assignedClassNames, classScopeStaffId, date, students.length]);
 
   useEffect(() => {
     void refresh();
@@ -430,9 +484,11 @@ function StudentAttendanceBoard() {
   const counts = summary?.counts;
   const notPresent = summary?.notPresent ?? [];
 
+  const teacherView = Boolean(classScopeStaffId);
+
   return (
     <div className="space-y-4">
-      <ParentLeaveInbox />
+      {!teacherView ? <ParentLeaveInbox /> : null}
       <AttendanceActions>
         <DatePicker
           value={date}
@@ -449,17 +505,19 @@ function StudentAttendanceBoard() {
           onClick={() => openMark()}
         >
           <UserCheck className="mr-1.5 h-4 w-4 shrink-0" />
-          <span className="truncate">Mark students</span>
+          <span className="truncate">{teacherView ? "Mark my students" : "Mark students"}</span>
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-10 w-full rounded-full px-4"
-          onClick={() => setUploadOpen(true)}
-        >
-          <Upload className="mr-1.5 h-4 w-4 shrink-0" />
-          Upload
-        </Button>
+        {!teacherView ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-full rounded-full px-4"
+            onClick={() => setUploadOpen(true)}
+          >
+            <Upload className="mr-1.5 h-4 w-4 shrink-0" />
+            Upload
+          </Button>
+        ) : null}
       </AttendanceActions>
 
       <div className="grid grid-cols-12 gap-4">
@@ -467,7 +525,7 @@ function StudentAttendanceBoard() {
           <div className="mb-3 flex items-center justify-between gap-2">
             <div>
               <div className="text-[13px] font-semibold text-slate-900 dark:text-zinc-50">
-                Students · this month
+                {teacherView ? "My students · this month" : "Students · this month"}
               </div>
               <div className="text-[12px] text-slate-500">
                 {summary?.enrolled ?? "—"} enrolled
@@ -815,13 +873,19 @@ function StudentAttendanceBoard() {
 export function AttendanceWorkspace() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/attendance" });
-  const tab = attendanceTabFromSearch(search.tab);
+  const { session } = useAuth();
+  const teacherScope =
+    Boolean(sessionStaffClassScopeId(session)) || isStaffSelfPreviewSession(session);
+  const rawTab = attendanceTabFromSearch(search.tab);
+  const tab: AttendanceTab =
+    teacherScope && rawTab === "devices" ? "students" : rawTab;
   const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null);
 
   function setTab(next: AttendanceTab) {
+    const safe = teacherScope && next === "devices" ? "students" : next;
     navigate({
       to: "/tenant/attendance",
-      search: next === "students" ? {} : { tab: next },
+      search: safe === "students" ? {} : { tab: safe },
       replace: true,
     });
   }
@@ -829,7 +893,7 @@ export function AttendanceWorkspace() {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 px-3 pb-24 pt-3 sm:px-4 md:px-6 md:pb-8">
       <h1 className="text-[22px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
-        Attendance
+        {teacherScope ? "My attendance" : "Attendance"}
       </h1>
       <div className="grid w-full grid-cols-1 gap-2 lg:grid-cols-5">
         <Tabs
@@ -839,21 +903,34 @@ export function AttendanceWorkspace() {
             else if (value === "devices") setTab("devices");
             else setTab("students");
           }}
-          className="min-w-0 lg:col-span-2"
+          className={cn("min-w-0", teacherScope ? "lg:col-span-2" : "lg:col-span-2")}
         >
-          <TabsList className="grid h-10 w-full grid-cols-3 rounded-full bg-slate-100 p-1 dark:bg-white/10">
+          <TabsList
+            className={cn(
+              "grid h-10 w-full rounded-full bg-slate-100 p-1 dark:bg-white/10",
+              teacherScope ? "grid-cols-2" : "grid-cols-3",
+            )}
+          >
             <TabsTrigger value="students" className="h-8 w-full rounded-full px-2 data-[state=active]:text-[#0F766E]">
-              <span className="truncate">Students</span>
+              <span className="truncate">{teacherScope ? "My students" : "Students"}</span>
             </TabsTrigger>
             <TabsTrigger value="staff" className="h-8 w-full rounded-full px-2 data-[state=active]:text-[#0F766E]">
-              <span className="truncate">Staff</span>
+              <span className="truncate">{teacherScope ? "My attendance" : "Staff"}</span>
             </TabsTrigger>
-            <TabsTrigger value="devices" className="h-8 w-full rounded-full px-2 data-[state=active]:text-[#0F766E]">
-              <span className="truncate">Devices</span>
-            </TabsTrigger>
+            {!teacherScope ? (
+              <TabsTrigger value="devices" className="h-8 w-full rounded-full px-2 data-[state=active]:text-[#0F766E]">
+                <span className="truncate">Devices</span>
+              </TabsTrigger>
+            ) : null}
           </TabsList>
         </Tabs>
-        <div ref={setActionsHost} className="grid min-w-0 grid-cols-3 gap-2 lg:col-span-3" />
+        <div
+          ref={setActionsHost}
+          className={cn(
+            "grid min-w-0 gap-2 lg:col-span-3",
+            teacherScope ? "grid-cols-2" : "grid-cols-3",
+          )}
+        />
       </div>
       <AttendanceToolbarProvider host={actionsHost}>
         {tab === "students" ? (

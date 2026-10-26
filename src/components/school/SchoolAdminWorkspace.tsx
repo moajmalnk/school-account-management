@@ -235,6 +235,7 @@ import {
   type PaymentFeeLine,
   currentPayrollMonth,
   formatPayrollMonthLabel,
+  getStaffAttendanceForMonth,
   staffPayableSalary,
   staffGrossSalary,
   upsertStaffAttendanceMonth,
@@ -1406,10 +1407,13 @@ function PremiumDashboard({
   expensesReady = true,
 }: PremiumDashboardProps) {
   const { session } = useAuth();
-  const showFinanceChrome = sessionHasAnyFinance(session);
-  const canReceivePayment = sessionCanAccessFinanceView(session, "receive");
-  const canMakePayment = sessionCanAccessFinanceView(session, "make");
-  const canAdmitStudent = sessionHasPermission(session, "students");
+  const navigate = useNavigate();
+  const staffHome =
+    Boolean(sessionStaffClassScopeId(session)) || isStaffSelfPreviewSession(session);
+  const showFinanceChrome = !staffHome && sessionHasAnyFinance(session);
+  const canReceivePayment = !staffHome && sessionCanAccessFinanceView(session, "receive");
+  const canMakePayment = !staffHome && sessionCanAccessFinanceView(session, "make");
+  const canAdmitStudent = !staffHome && sessionHasPermission(session, "students");
   const liveStudents = students.filter((s) => !isRecordDeleted(s.deletedAt));
   const liveStaff = staff.filter((s) => !isRecordDeleted(s.deletedAt));
   const inHand = cashPosition.cash;
@@ -1419,6 +1423,26 @@ function PremiumDashboard({
   const cashReady = expensesReady && cashPosition.ready;
   const paidCount = feePaidCount;
   const activeStaff = liveStaff.filter((s) => s.active).length;
+  const payrollMonth = currentPayrollMonth();
+  const myAttendance = useMemo(() => {
+    if (!staffHome) return null;
+    const me = liveStaff[0];
+    if (!me) return { label: "Profile not linked", recorded: false };
+    const row = getStaffAttendanceForMonth(me, payrollMonth);
+    if (!row) {
+      return {
+        label: `Not recorded · ${formatPayrollMonthLabel(payrollMonth)}`,
+        recorded: false,
+      };
+    }
+    const pct = Math.round(
+      ((row.daysPresent + row.paidLeaveDays) / Math.max(1, row.workingDays)) * 100,
+    );
+    return {
+      label: `${pct}% · ${formatPayrollMonthLabel(payrollMonth)}`,
+      recorded: true,
+    };
+  }, [liveStaff, payrollMonth, staffHome]);
 
   const admissionWeeks = useMemo(() => {
     const count = liveStudents.length;
@@ -1468,11 +1492,151 @@ function PremiumDashboard({
   const periodLabel =
     PAYMENT_PERIOD_OPTIONS.find((option) => option.value === period)?.label ?? "This Month";
 
+  if (staffHome) {
+    const hour = new Date().getHours();
+    const greeting =
+      hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+    const firstName = (liveStaff[0]?.name || "").trim().split(/\s+/)[0] || "there";
+    const roleLine = [liveStaff[0]?.role, liveStaff[0]?.dept].filter(Boolean).join(" · ");
+    const attendancePending = !myAttendance?.recorded;
+
+    return (
+      <div className="space-y-4 sm:space-y-5">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 xl:grid-cols-12 xl:items-stretch">
+          <section
+            className={cn(
+              dashCardClass,
+              DASH.overview,
+              "relative flex min-w-0 flex-col overflow-hidden p-5 sm:p-6 xl:col-span-8",
+            )}
+          >
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-teal-400/20 blur-3xl dark:bg-teal-500/10"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -bottom-24 -left-16 h-48 w-48 rounded-full bg-emerald-300/15 blur-3xl dark:bg-emerald-500/10"
+            />
+
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-teal-800/65 dark:text-teal-200/60">
+                    My classroom · {formatPayrollMonthLabel(payrollMonth)}
+                  </p>
+                  <h2 className="mt-1.5 text-[22px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50 sm:text-[26px]">
+                    {greeting}, {firstName}
+                  </h2>
+                  {roleLine ? (
+                    <p className="mt-1 text-[13px] text-slate-600/90 dark:text-zinc-400">{roleLine}</p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={onViewStudents}
+                  className="inline-flex items-center gap-1 rounded-full bg-white/55 px-3 py-1.5 text-[12px] font-semibold text-teal-900 shadow-sm ring-1 ring-teal-900/5 transition-colors hover:bg-white/80 dark:bg-white/10 dark:text-teal-100 dark:ring-white/10 dark:hover:bg-white/15"
+                >
+                  View roster
+                  <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </button>
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={onViewStudents}
+                  className={cn(
+                    dashStudentsTileClass,
+                    "flex min-w-0 items-center gap-4 rounded-2xl p-4 text-left sm:p-5",
+                  )}
+                >
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/85 text-[#047857] shadow-sm dark:bg-white/10 dark:text-emerald-300">
+                    <GraduationCap className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[11px] font-semibold uppercase tracking-wide text-emerald-900/70 dark:text-emerald-100/65">
+                      My students
+                    </span>
+                    <span className="mt-0.5 flex items-baseline gap-2">
+                      <span className="font-mono text-[28px] font-bold leading-none tracking-tight text-emerald-950 dark:text-emerald-50">
+                        {liveStudents.length}
+                      </span>
+                      <span className="text-[12px] font-medium text-emerald-800/75 dark:text-emerald-100/65">
+                        {liveStudents.length === 0 ? "No classes assigned" : "in your classes"}
+                      </span>
+                    </span>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigate({ to: "/tenant/attendance", search: { tab: "staff" } })}
+                  className={cn(
+                    dashStaffTileClass,
+                    "flex min-w-0 items-center gap-4 rounded-2xl p-4 text-left sm:p-5",
+                  )}
+                >
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/85 text-sky-700 shadow-sm dark:bg-white/10 dark:text-sky-300">
+                    <Calendar className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[11px] font-semibold uppercase tracking-wide text-sky-900/70 dark:text-sky-100/65">
+                      My attendance
+                    </span>
+                    <span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span
+                        className={cn(
+                          "text-[18px] font-semibold leading-none tracking-tight sm:text-[20px]",
+                          attendancePending
+                            ? "text-amber-800 dark:text-amber-200"
+                            : "text-emerald-800 dark:text-emerald-200",
+                        )}
+                      >
+                        {attendancePending ? "Pending" : "Recorded"}
+                      </span>
+                      <span className="text-[12px] font-medium text-sky-800/75 dark:text-sky-100/65">
+                        {myAttendance?.label ?? formatPayrollMonthLabel(payrollMonth)}
+                      </span>
+                    </span>
+                  </span>
+                </button>
+              </div>
+
+              <div className="mt-auto flex flex-col gap-2.5 pt-6 sm:flex-row sm:flex-wrap sm:items-center">
+                <button
+                  type="button"
+                  onClick={() => navigate({ to: "/tenant/attendance", search: {} })}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#0D9488] to-[#0F766E] px-5 text-[13px] font-semibold text-white shadow-md shadow-teal-700/25 transition-opacity hover:opacity-90"
+                >
+                  <ClipboardList className="h-4 w-4" strokeWidth={2.25} />
+                  Mark my students
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate({ to: "/tenant/attendance", search: { tab: "staff" } })}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-white/70 px-5 text-[13px] font-semibold text-slate-800 shadow-sm ring-1 ring-slate-900/5 transition-colors hover:bg-white dark:bg-white/10 dark:text-zinc-100 dark:ring-white/10 dark:hover:bg-white/15"
+                >
+                  <Calendar className="h-4 w-4" strokeWidth={2.25} />
+                  {attendancePending ? "Record my attendance" : "Update my attendance"}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <aside className="flex min-h-0 flex-col xl:col-span-4">
+            <DashboardTodoNotesPanel />
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 xl:grid-cols-12">
         <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2 xl:col-span-8">
-          {/* School Overview */}
+          {/* School overview */}
           <section className={cn(dashCardClass, DASH.overview, "flex min-w-0 flex-col p-4 sm:p-5")}>
             <DashboardPanelHeading icon={Users} title="School Overview" />
             <div className="mt-4 grid min-w-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
@@ -2146,6 +2310,24 @@ export function SchoolDashboard() {
     studentFeeBreaks,
   } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
+  const classScopeStaffId = sessionStaffClassScopeId(session);
+  const selfStaffId =
+    classScopeStaffId ||
+    (isStaffSelfPreviewSession(session) ? session?.staffId?.trim() || null : null);
+  const assignedClassNames = useMemo(
+    () =>
+      classScopeStaffId ? assignedClassNamesForStaff(classes, classScopeStaffId) : [],
+    [classes, classScopeStaffId],
+  );
+  const scopedStudents = useMemo(() => {
+    if (!classScopeStaffId) return students;
+    if (assignedClassNames.length === 0) return [];
+    return students.filter((s) => studentInAssignedClasses(s.cls, assignedClassNames));
+  }, [students, classScopeStaffId, assignedClassNames]);
+  const scopedStaff = useMemo(() => {
+    if (!selfStaffId) return staff;
+    return staff.filter((member) => member.id === selfStaffId);
+  }, [staff, selfStaffId]);
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
 
@@ -2277,8 +2459,8 @@ export function SchoolDashboard() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <PremiumDashboard
-        students={students}
-        staff={staff}
+        students={scopedStudents}
+        staff={scopedStaff}
         periodIncome={periodIncome}
         expenseTotal={expenseTotal}
         periodReceiptCount={filteredPayments.length}
