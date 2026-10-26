@@ -4,6 +4,13 @@
  */
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
+    "/download": {
+      id: "/download";
+      path: "/download";
+      fullPath: "/download";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
     "/terms": {
       id: "/terms";
       path: "/terms";

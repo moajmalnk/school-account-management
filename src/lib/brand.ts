@@ -6,6 +6,9 @@ export const BRAND = {
   /** Google Play listing — used by marketing store badges. */
   playStoreUrl: "https://play.google.com/store/apps/details?id=com.bzole.feezo",
   appStoreUrl: "https://apps.apple.com/in/app/feezo/id6811416005",
+  /** Smart download bridge — QR codes encode this; /download redirects by OS. */
+  downloadPath: "/download",
+  downloadUrl: "https://www.feezo.app/download",
   contactPath: "/contact",
   contact: {
     email: "info@feezo.app",

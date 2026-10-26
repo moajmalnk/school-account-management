@@ -21,6 +21,7 @@ import { Route as ImpersonateRouteImport } from './routes/impersonate'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as FamilyRouteImport } from './routes/family'
+import { Route as DownloadRouteImport } from './routes/download'
 import { Route as DataDeletionRouteImport } from './routes/data-deletion'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as IndexRouteImport } from './routes/index'
@@ -123,6 +124,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const FamilyRoute = FamilyRouteImport.update({
   id: '/family',
   path: '/family',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DownloadRoute = DownloadRouteImport.update({
+  id: '/download',
+  path: '/download',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DataDeletionRoute = DataDeletionRouteImport.update({
@@ -348,6 +354,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/contact': typeof ContactRoute
   '/data-deletion': typeof DataDeletionRoute
+  '/download': typeof DownloadRoute
   '/family': typeof FamilyRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/home': typeof HomeRoute
@@ -405,6 +412,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/contact': typeof ContactRoute
   '/data-deletion': typeof DataDeletionRoute
+  '/download': typeof DownloadRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/home': typeof HomeRoute
   '/impersonate': typeof ImpersonateRoute
@@ -458,6 +466,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/contact': typeof ContactRoute
   '/data-deletion': typeof DataDeletionRoute
+  '/download': typeof DownloadRoute
   '/family': typeof FamilyRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/home': typeof HomeRoute
@@ -517,6 +526,7 @@ export interface FileRouteTypes {
     | '/'
     | '/contact'
     | '/data-deletion'
+    | '/download'
     | '/family'
     | '/forgot-password'
     | '/home'
@@ -574,6 +584,7 @@ export interface FileRouteTypes {
     | '/'
     | '/contact'
     | '/data-deletion'
+    | '/download'
     | '/forgot-password'
     | '/home'
     | '/impersonate'
@@ -626,6 +637,7 @@ export interface FileRouteTypes {
     | '/'
     | '/contact'
     | '/data-deletion'
+    | '/download'
     | '/family'
     | '/forgot-password'
     | '/home'
@@ -684,6 +696,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ContactRoute: typeof ContactRoute
   DataDeletionRoute: typeof DataDeletionRoute
+  DownloadRoute: typeof DownloadRoute
   FamilyRoute: typeof FamilyRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HomeRoute: typeof HomeRoute
@@ -784,6 +797,13 @@ declare module '@tanstack/react-router' {
       path: '/family'
       fullPath: '/family'
       preLoaderRoute: typeof FamilyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/download': {
+      id: '/download'
+      path: '/download'
+      fullPath: '/download'
+      preLoaderRoute: typeof DownloadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/data-deletion': {
@@ -1216,6 +1236,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ContactRoute: ContactRoute,
   DataDeletionRoute: DataDeletionRoute,
+  DownloadRoute: DownloadRoute,
   FamilyRoute: FamilyRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   HomeRoute: HomeRoute,

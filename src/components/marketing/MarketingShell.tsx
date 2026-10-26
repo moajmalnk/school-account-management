@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { FeezoMark } from "@/components/brand/FeezoBrand";
+import { AppDownloadQr } from "@/components/marketing/AppDownloadQr";
 import { MarketingAuthActions } from "@/components/marketing/MarketingAuthActions";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingMobileNav } from "@/components/marketing/MarketingMobileNav";
@@ -105,6 +106,8 @@ export function MarketingShell({ children }: { children: ReactNode }) {
 
         <MarketingFooter />
       </div>
+
+      <AppDownloadQr />
     </div>
   );
 }
