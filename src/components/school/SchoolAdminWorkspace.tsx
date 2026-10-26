@@ -3308,8 +3308,14 @@ function StudentsDirectoryTable({
 }
 
 export function AdmitStudentPage() {
-  const { students, classes, setClasses, admitStudentToActiveYear, activeFeeTerms } =
-    useTenantStore();
+  const {
+    students,
+    classes,
+    setClasses,
+    admitStudentToActiveYear,
+    activeFeeTerms,
+    academicYear,
+  } = useTenantStore();
   const navigate = useNavigate();
   const defaultClass = classes[0]?.className ?? "";
   const [form, setForm] = useState<AdmitStudentForm>(() => emptyAdmitForm(defaultClass));
@@ -3361,19 +3367,28 @@ export function AdmitStudentPage() {
       classes.map((c) => c.id),
       3,
     );
-    const created = buildClassFromLabel(clientId, className);
+    const yearTag = academicYear.trim() || undefined;
+    const created = {
+      ...buildClassFromLabel(clientId, className),
+      ...(yearTag ? { academicYear: yearTag } : {}),
+    };
     setSavingClass(true);
     try {
       setClasses((prev) => [...prev, created]);
       let saved = created;
       if (getApiToken()) {
-        saved = { ...created, ...(await apiUpsertClass(created)) };
-        const finalId = saved.id || clientId;
-        setClasses((prev) =>
-          prev.map((c) =>
-            c.id === clientId || c.id === finalId ? { ...created, ...saved, id: finalId } : c,
-          ),
-        );
+        const remote = await apiUpsertClass(created);
+        const finalId = remote.id || clientId;
+        saved = {
+          ...created,
+          ...remote,
+          id: finalId,
+          academicYear: remote.academicYear || created.academicYear || yearTag,
+        };
+        setClasses((prev) => [
+          ...prev.filter((c) => c.id !== clientId && c.id !== finalId),
+          saved,
+        ]);
       }
       setForm((prev) => ({ ...prev, cls: saved.className || created.className }));
       setAddClassOpen(false);
@@ -18097,6 +18112,7 @@ function ClassesCard({
   feeTerms: FeeTerm[];
 }) {
   const navigate = useNavigate();
+  const { academicYear } = useTenantStore();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ClassConfig | null>(null);
@@ -18480,6 +18496,7 @@ function ClassesCard({
     }
     const classTeacherId = form.classTeacherId || undefined;
     const existing = editingId ? classes.find((c) => c.id === editingId) : undefined;
+    const yearTag = existing?.academicYear || academicYear.trim() || undefined;
     const next: Omit<ClassConfig, "id"> = {
       className,
       grade,
@@ -18492,6 +18509,7 @@ function ClassesCard({
       feeCollectionStartMonth:
         form.billingCycle === "Monthly" ? form.feeCollectionStartMonth : undefined,
       classTeacherId,
+      ...(yearTag ? { academicYear: yearTag } : {}),
     };
     if (editingId) {
       const previous = classes.find((c) => c.id === editingId);
@@ -18502,12 +18520,28 @@ function ClassesCard({
           prev.map((s) => (s.cls === previous.className ? { ...s, cls: className } : s)),
         );
       }
-      void apiUpsertClass(updated).catch((err) =>
-        toast.error(err instanceof Error ? err.message : "Could not sync class"),
-      );
-      toast.success(`${className} updated`, {
-        description: `${formatMoney(next.tuitionFeeAmount)} · ${scheduleSummary({ ...next, id: editingId })}`,
-      });
+      void apiUpsertClass(updated)
+        .then((saved) => {
+          setClasses((prev) =>
+            prev.map((c) =>
+              c.id === editingId
+                ? {
+                    ...c,
+                    ...updated,
+                    ...saved,
+                    id: saved.id || editingId,
+                    academicYear: saved.academicYear || updated.academicYear || yearTag,
+                  }
+                : c,
+            ),
+          );
+          toast.success(`${className} updated`, {
+            description: `${formatMoney(next.tuitionFeeAmount)} · ${scheduleSummary({ ...next, id: editingId })}`,
+          });
+        })
+        .catch((err) =>
+          toast.error(err instanceof Error ? err.message : "Could not sync class"),
+        );
     } else {
       const nextId = nextPrefixedId(
         "CLS",
@@ -18519,11 +18553,18 @@ function ClassesCard({
       void apiUpsertClass(created)
         .then((saved) => {
           const finalId = saved?.id || nextId;
-          setClasses((prev) =>
-            prev.map((c) =>
-              c.id === created.id || c.id === finalId ? { ...c, ...created, ...saved, id: finalId } : c,
-            ),
-          );
+          setClasses((prev) => {
+            const merged = {
+              ...created,
+              ...saved,
+              id: finalId,
+              academicYear: saved.academicYear || created.academicYear || yearTag,
+            };
+            return [
+              ...prev.filter((c) => c.id !== nextId && c.id !== finalId),
+              merged,
+            ];
+          });
           toast.success(`${className} added`, {
             description: `${formatMoney(next.tuitionFeeAmount)} · ${scheduleSummary({ ...created, id: finalId })}`,
           });
@@ -21446,6 +21487,11 @@ function TransportCard({
       id: `fl-e-${index + 1}`,
       amount: eveningFee,
     }));
+    const yearTag = academicYear.trim() || undefined;
+    const existingYear =
+      (editingId
+        ? transportRoutes.find((r) => r.id === editingId)?.academicYear
+        : undefined) || yearTag;
     const payload: Omit<TransportRoute, "id"> = {
       mapFrom,
       mapTo,
@@ -21459,6 +21505,7 @@ function TransportCard({
       bothFeeSchedule,
       feeCollectionStartMonth:
         form.billingCycle === "Monthly" ? form.feeCollectionStartMonth : undefined,
+      ...(existingYear ? { academicYear: existingYear } : {}),
       ...(form.fromLat != null ? { fromLat: form.fromLat } : {}),
       ...(form.fromLng != null ? { fromLng: form.fromLng } : {}),
       ...(form.toLat != null ? { toLat: form.toLat } : {}),
@@ -21474,7 +21521,16 @@ function TransportCard({
       void apiUpsertTransportRoute(updated)
         .then((saved) => {
           setTransportRoutes((prev) =>
-            prev.map((r) => (r.id === editingId ? { ...updated, ...saved, id: saved.id || editingId } : r)),
+            prev.map((r) =>
+              r.id === editingId
+                ? {
+                    ...updated,
+                    ...saved,
+                    id: saved.id || editingId,
+                    academicYear: saved.academicYear || updated.academicYear || yearTag,
+                  }
+                : r,
+            ),
           );
           syncRouteVehicles(saved.id || editingId, form.vehicleIds);
           toast.success(`Route updated · ${mapFrom} → ${mapTo}`);
@@ -21493,11 +21549,16 @@ function TransportCard({
       void apiUpsertTransportRoute(created)
         .then((saved) => {
           const finalId = saved.id || nextId;
-          setTransportRoutes((prev) =>
-            prev.map((r) =>
-              r.id === nextId || r.id === finalId ? { ...created, ...saved, id: finalId } : r,
-            ),
-          );
+          setTransportRoutes((prev) => {
+            const merged: TransportRoute = {
+              ...created,
+              ...saved,
+              id: finalId,
+              academicYear: saved.academicYear || created.academicYear || yearTag,
+            };
+            const withoutTemp = prev.filter((r) => r.id !== nextId && r.id !== finalId);
+            return [...withoutTemp, merged];
+          });
           syncRouteVehicles(finalId, form.vehicleIds);
           toast.success(`Route added · ${mapFrom} → ${mapTo}`);
         })
@@ -21647,12 +21708,25 @@ function TransportCard({
           const row = routeImportReady[index];
           const clientId = row.existingId || nextPrefixedId("TR", usedIds, 3);
           if (!row.existingId) usedIds = [...usedIds, clientId];
-          const payload: TransportRoute = { ...row.route, id: clientId };
+          const yearTag =
+            transportRoutes.find((r) => r.id === row.existingId)?.academicYear ||
+            academicYear.trim() ||
+            undefined;
+          const payload: TransportRoute = {
+            ...row.route,
+            id: clientId,
+            ...(yearTag ? { academicYear: yearTag } : {}),
+          };
           setRouteImportProgress({ current: index + 1, total: routeImportReady.length });
           try {
             const saved = await apiUpsertTransportRoute(payload);
             const finalId = saved.id || clientId;
-            const merged: TransportRoute = { ...payload, ...saved, id: finalId };
+            const merged: TransportRoute = {
+              ...payload,
+              ...saved,
+              id: finalId,
+              academicYear: saved.academicYear || payload.academicYear || yearTag,
+            };
             if (!row.existingId) {
               created += 1;
               if (!usedIds.includes(finalId)) usedIds = [...usedIds, finalId];
