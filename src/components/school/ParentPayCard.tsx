@@ -26,10 +26,24 @@ const CAPABILITIES = [
   },
 ] as const;
 
+type ParentPayState = {
+  enabled: boolean;
+  configured: boolean;
+  settlementEnabled: boolean;
+  settlementReady: boolean;
+  platformFee: number;
+  settlementAccountLast4: string;
+  settlementIfsc: string;
+  settlementHolder: string;
+};
+
 export function ParentPayCard() {
   const [enabled, setEnabled] = useState(false);
   const [saved, setSaved] = useState(false);
   const [configured, setConfigured] = useState(true);
+  const [settlement, setSettlement] = useState<Omit<ParentPayState, "enabled" | "configured"> | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -41,6 +55,14 @@ export function ParentPayCard() {
         setEnabled(data.enabled);
         setSaved(data.enabled);
         setConfigured(data.configured !== false);
+        setSettlement({
+          settlementEnabled: !!data.settlementEnabled,
+          settlementReady: !!data.settlementReady,
+          platformFee: typeof data.platformFee === "number" ? data.platformFee : 5.9,
+          settlementAccountLast4: data.settlementAccountLast4 || "",
+          settlementIfsc: data.settlementIfsc || "",
+          settlementHolder: data.settlementHolder || "",
+        });
       })
       .catch(() => undefined)
       .finally(() => setLoading(false));
@@ -66,6 +88,15 @@ export function ParentPayCard() {
     : saved
       ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-950/35 dark:text-emerald-200"
       : "border-[#E5E5E5] bg-[#F4F4F5] text-black/55 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-400";
+
+  const settlementHint =
+    settlement?.settlementReady
+      ? `Parents pay fee + ₹${settlement.platformFee.toFixed(2)}. Your school receives the full fee${
+          settlement.settlementAccountLast4 ? ` (·····${settlement.settlementAccountLast4})` : ""
+        }; Feezo keeps the platform fee.`
+      : settlement?.settlementEnabled
+        ? "Settlement setup is in progress. Feezo support will finish the Cashfree vendor before online pay can go live."
+        : null;
 
   return (
     <form
@@ -144,6 +175,24 @@ export function ParentPayCard() {
           ))}
         </div>
 
+        {settlementHint ? (
+          <p
+            className={cn(
+              "rounded-xl border px-3 py-2.5 text-[12px] leading-snug",
+              settlement?.settlementReady
+                ? "border-[#99F6E4] bg-[#F0FDFA] text-[#115E59] dark:border-teal-500/25 dark:bg-teal-950/30 dark:text-teal-100"
+                : "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-100",
+            )}
+          >
+            {settlementHint}
+            {settlement?.settlementReady && settlement.settlementIfsc ? (
+              <span className="mt-1 block font-mono text-[11px] opacity-80">
+                {settlement.settlementHolder || "School account"} · {settlement.settlementIfsc}
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+
         <div
           className={cn(
             "flex flex-col gap-3 rounded-xl border px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between",
@@ -159,7 +208,9 @@ export function ParentPayCard() {
             <p className="mt-0.5 text-[11.5px] leading-snug text-black/50 dark:text-zinc-400">
               {configured
                 ? "Turns on app checkout, Pay link, and Finance → Online."
-                : "Cashfree is not connected for this school yet."}
+                : settlement?.settlementEnabled
+                  ? "School bank settlement is not ACTIVE yet."
+                  : "Cashfree is not connected for this school yet."}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3 self-end sm:self-auto">
@@ -180,7 +231,9 @@ export function ParentPayCard() {
 
         {!configured ? (
           <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800 dark:border-rose-500/30 dark:bg-rose-950/30 dark:text-rose-200">
-            Online payment is not configured. Ask Feezo support to connect Cashfree for this school.
+            {settlement?.settlementEnabled
+              ? "Settlement setup in progress. Ask Feezo support when the Cashfree vendor is ACTIVE."
+              : "Online payment is not configured. Ask Feezo support to connect Cashfree for this school."}
           </p>
         ) : null}
         {error ? (

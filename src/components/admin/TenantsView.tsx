@@ -26,6 +26,7 @@ import {
   ChevronDown,
   ChevronUp,
   Check,
+  Landmark,
 } from "lucide-react";
 import { toast } from "sonner";
 import { type Tenant, type Tier, type Status } from "./data";
@@ -43,6 +44,7 @@ import { TenantsViewSkeleton } from "@/components/admin/TenantsViewSkeleton";
 import { mobileFabClass } from "@/components/layout/MobileTabBar";
 import { PlatformInvoicesPanel } from "@/components/admin/PlatformInvoicesPanel";
 import { TenantSubscriptionsPanel } from "@/components/admin/TenantSubscriptionsPanel";
+import { TenantSettlementPanel } from "@/components/admin/TenantSettlementPanel";
 import { TenantActivityPanel } from "@/components/admin/TenantActivityPanel";
 import { TenantAccessControl, TenantPdfCreditControl } from "@/components/admin/TenantAccessControl";
 import { OrganicCard } from "@/components/ui/organic-card";
@@ -1430,6 +1432,7 @@ const TENANT_DETAIL_TABS = [
   { id: "staff", label: "Staff", icon: Users },
   { id: "payments", label: "Payments", icon: Receipt },
   { id: "billing", label: "Billing", icon: Wallet },
+  { id: "settlement", label: "Settlement", icon: Landmark },
   { id: "subscriptions", label: "Subscriptions", icon: CalendarClock },
   { id: "activity", label: "Activity", icon: Activity },
   { id: "access", label: "Access", icon: Shield },
@@ -2301,6 +2304,12 @@ function TenantDetailDrawer({
                   />
                 </div>
               </div>
+            </TabsContent>
+
+            <TabsContent value="settlement" className="mt-0">
+              {tab === "settlement" && (
+                <TenantSettlementPanel tenantId={tenant.id} tenantName={tenant.name} />
+              )}
             </TabsContent>
 
             <TabsContent value="subscriptions" className="mt-0">

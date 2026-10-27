@@ -57,6 +57,7 @@ import { Route as SuperAdminSupportIndexRouteImport } from './routes/super-admin
 import { Route as TenantStudentsEditRouteImport } from './routes/tenant/students_.edit'
 import { Route as TenantStudentsAdmitRouteImport } from './routes/tenant/students_.admit'
 import { Route as TenantStaffEditRouteImport } from './routes/tenant/staff_.edit'
+import { Route as SuperAdminSupportSettlementSetupRouteImport } from './routes/super-admin/support/settlement-setup'
 import { Route as SuperAdminSupportLeadsRouteImport } from './routes/super-admin/support/leads'
 import { Route as SuperAdminSupportHelpRouteImport } from './routes/super-admin/support/help'
 import { Route as SuperAdminSupportContactRouteImport } from './routes/super-admin/support/contact'
@@ -306,6 +307,12 @@ const TenantStaffEditRoute = TenantStaffEditRouteImport.update({
   path: '/staff/edit',
   getParentRoute: () => TenantRoute,
 } as any)
+const SuperAdminSupportSettlementSetupRoute =
+  SuperAdminSupportSettlementSetupRouteImport.update({
+    id: '/settlement-setup',
+    path: '/settlement-setup',
+    getParentRoute: () => SuperAdminSupportRoute,
+  } as any)
 const SuperAdminSupportLeadsRoute = SuperAdminSupportLeadsRouteImport.update({
   id: '/leads',
   path: '/leads',
@@ -403,6 +410,7 @@ export interface FileRoutesByFullPath {
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
   '/super-admin/support/leads': typeof SuperAdminSupportLeadsRoute
+  '/super-admin/support/settlement-setup': typeof SuperAdminSupportSettlementSetupRoute
   '/tenant/staff/edit': typeof TenantStaffEditRoute
   '/tenant/students/admit': typeof TenantStudentsAdmitRoute
   '/tenant/students/edit': typeof TenantStudentsEditRoute
@@ -456,6 +464,7 @@ export interface FileRoutesByTo {
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
   '/super-admin/support/leads': typeof SuperAdminSupportLeadsRoute
+  '/super-admin/support/settlement-setup': typeof SuperAdminSupportSettlementSetupRoute
   '/tenant/staff/edit': typeof TenantStaffEditRoute
   '/tenant/students/admit': typeof TenantStudentsAdmitRoute
   '/tenant/students/edit': typeof TenantStudentsEditRoute
@@ -515,6 +524,7 @@ export interface FileRoutesById {
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
   '/super-admin/support/leads': typeof SuperAdminSupportLeadsRoute
+  '/super-admin/support/settlement-setup': typeof SuperAdminSupportSettlementSetupRoute
   '/tenant/staff_/edit': typeof TenantStaffEditRoute
   '/tenant/students_/admit': typeof TenantStudentsAdmitRoute
   '/tenant/students_/edit': typeof TenantStudentsEditRoute
@@ -575,6 +585,7 @@ export interface FileRouteTypes {
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
     | '/super-admin/support/leads'
+    | '/super-admin/support/settlement-setup'
     | '/tenant/staff/edit'
     | '/tenant/students/admit'
     | '/tenant/students/edit'
@@ -628,6 +639,7 @@ export interface FileRouteTypes {
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
     | '/super-admin/support/leads'
+    | '/super-admin/support/settlement-setup'
     | '/tenant/staff/edit'
     | '/tenant/students/admit'
     | '/tenant/students/edit'
@@ -686,6 +698,7 @@ export interface FileRouteTypes {
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
     | '/super-admin/support/leads'
+    | '/super-admin/support/settlement-setup'
     | '/tenant/staff_/edit'
     | '/tenant/students_/admit'
     | '/tenant/students_/edit'
@@ -1051,6 +1064,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TenantStaffEditRouteImport
       parentRoute: typeof TenantRoute
     }
+    '/super-admin/support/settlement-setup': {
+      id: '/super-admin/support/settlement-setup'
+      path: '/settlement-setup'
+      fullPath: '/super-admin/support/settlement-setup'
+      preLoaderRoute: typeof SuperAdminSupportSettlementSetupRouteImport
+      parentRoute: typeof SuperAdminSupportRoute
+    }
     '/super-admin/support/leads': {
       id: '/super-admin/support/leads'
       path: '/leads'
@@ -1156,6 +1176,7 @@ interface SuperAdminSupportRouteChildren {
   SuperAdminSupportContactRoute: typeof SuperAdminSupportContactRoute
   SuperAdminSupportHelpRoute: typeof SuperAdminSupportHelpRoute
   SuperAdminSupportLeadsRoute: typeof SuperAdminSupportLeadsRoute
+  SuperAdminSupportSettlementSetupRoute: typeof SuperAdminSupportSettlementSetupRoute
   SuperAdminSupportIndexRoute: typeof SuperAdminSupportIndexRoute
 }
 
@@ -1165,6 +1186,7 @@ const SuperAdminSupportRouteChildren: SuperAdminSupportRouteChildren = {
   SuperAdminSupportContactRoute: SuperAdminSupportContactRoute,
   SuperAdminSupportHelpRoute: SuperAdminSupportHelpRoute,
   SuperAdminSupportLeadsRoute: SuperAdminSupportLeadsRoute,
+  SuperAdminSupportSettlementSetupRoute: SuperAdminSupportSettlementSetupRoute,
   SuperAdminSupportIndexRoute: SuperAdminSupportIndexRoute,
 }
 

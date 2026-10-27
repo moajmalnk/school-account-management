@@ -474,6 +474,12 @@ export type PlatformInvoice = {
   tenantName?: string | null;
 };
 
+export {
+  fetchSuperAdminTenantSettlement,
+  saveSuperAdminTenantSettlement,
+  type TenantSettlement,
+} from "@/lib/api/tenant-settlement";
+
 export async function fetchSuperAdminTenantInvoices(tenantId: string): Promise<PlatformInvoice[]> {
   return apiRequest<PlatformInvoice[]>(
     `/api/super-admin/tenants/invoices.php?tenantId=${encodeURIComponent(tenantId)}`,

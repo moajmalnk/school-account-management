@@ -95,6 +95,20 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: unknown;
       parentRoute: unknown;
     };
+    "/super-admin/support/leads": {
+      id: "/super-admin/support/leads";
+      path: "/leads";
+      fullPath: "/super-admin/support/leads";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
+    "/super-admin/support/settlement-setup": {
+      id: "/super-admin/support/settlement-setup";
+      path: "/settlement-setup";
+      fullPath: "/super-admin/support/settlement-setup";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
     "/staff/collect/$token": {
       id: "/staff/collect/$token";
       path: "/staff/collect/$token";

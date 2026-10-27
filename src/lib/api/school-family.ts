@@ -101,6 +101,13 @@ export function schoolParentPay() {
     enabled: boolean;
     provider: "cashfree";
     configured: boolean;
+    settlementEnabled?: boolean;
+    settlementReady?: boolean;
+    vendorStatus?: string;
+    platformFee?: number;
+    settlementAccountLast4?: string;
+    settlementIfsc?: string;
+    settlementHolder?: string;
   }>("/api/school/parent-pay.php");
 }
 
@@ -114,6 +121,8 @@ export type SchoolFeePayLink = {
   paymentSessionId: string;
   publicId: string;
   amount: number;
+  platformFee?: number;
+  chargeAmount?: number;
   currency: string;
   shareUrl: string;
   payEnabled: boolean;

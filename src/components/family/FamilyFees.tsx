@@ -96,6 +96,8 @@ export function FamilyFees() {
 
   const chosen = (data?.lines ?? []).filter((line) => selected.includes(line.key));
   const total = chosen.reduce((sum, line) => sum + line.balance, 0);
+  const platformFee = data?.settlementReady ? Number(data.platformFee ?? 0) : 0;
+  const chargeTotal = total + (platformFee > 0 ? platformFee : 0);
   const nextDue = visible
     .map((line) => line.dueDate)
     .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
@@ -365,7 +367,12 @@ export function FamilyFees() {
               <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--family-ink-muted)]">
                 {selected.length} selected
               </p>
-              <p className="text-lg font-extrabold">{money(total, data.currency)}</p>
+              <p className="text-lg font-extrabold">{money(chargeTotal, data.currency)}</p>
+              {platformFee > 0 ? (
+                <p className="mt-0.5 text-[11px] text-[var(--family-ink-muted)]">
+                  Fees {money(total, data.currency)} + platform {money(platformFee, data.currency)}
+                </p>
+              ) : null}
             </div>
             <FamilyPillButton
               disabled={busy || !data.payEnabled}

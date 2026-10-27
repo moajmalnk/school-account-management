@@ -4,6 +4,7 @@ import { ArrowLeft, LifeBuoy, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { LeadsView } from "@/components/admin/LeadsView";
+import { SettlementSetupView } from "@/components/admin/SettlementSetupView";
 import { mobileChatViewportClass } from "@/components/layout/MobileTabBar";
 import {
   SupportChatBubble,
@@ -52,7 +53,7 @@ import { formatChatStamp } from "@/lib/dates";
 import { phoneDigits } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 
-type Section = "messages" | "autoReply" | "help" | "contact" | "leads";
+type Section = "messages" | "autoReply" | "help" | "contact" | "leads" | "settlement";
 
 const SECTIONS: { id: Section; label: string }[] = [
   { id: "messages", label: "Messages" },
@@ -60,6 +61,7 @@ const SECTIONS: { id: Section; label: string }[] = [
   { id: "help", label: "Help answers" },
   { id: "contact", label: "Contact" },
   { id: "leads", label: "Leads" },
+  { id: "settlement", label: "Settlement" },
 ];
 
 /** Absolute Support section paths (href avoids routeTree @ts-nocheck lag on `to`). */
@@ -68,6 +70,7 @@ const SUPPORT_SECTION_HREF: Record<Exclude<Section, "messages">, string> = {
   help: "/super-admin/support/help",
   contact: "/super-admin/support/contact",
   leads: "/super-admin/support/leads",
+  settlement: "/super-admin/support/settlement-setup",
 };
 
 const STATUS_FILTERS: { id: "all" | SupportTicketStatus; label: string }[] = [
@@ -123,6 +126,7 @@ function supportLocation(pathname: string): { section: Section; ticketId?: strin
   if (pathname.endsWith("/help")) return { section: "help" };
   if (pathname.endsWith("/contact")) return { section: "contact" };
   if (pathname.endsWith("/leads")) return { section: "leads" };
+  if (pathname.endsWith("/settlement-setup")) return { section: "settlement" };
   if (pathname.endsWith("/auto-reply")) return { section: "autoReply" };
   const prefix = "/super-admin/support/";
   if (pathname.startsWith(prefix)) {
@@ -1240,6 +1244,8 @@ export function SupportDeskView() {
         ) : null}
 
         {section === "leads" ? <LeadsView onSummary={setLeadSummary} /> : null}
+
+        {section === "settlement" ? <SettlementSetupView /> : null}
 
         {section === "contact" ? (
           <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">

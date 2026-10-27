@@ -378,6 +378,8 @@ export type FeeCheckout = {
   orderId: string;
   paymentSessionId?: string;
   amount: number;
+  platformFee?: number;
+  chargeAmount?: number;
   currency?: string;
   name?: string;
   description?: string;
@@ -401,6 +403,8 @@ export function familyFees(studentId: string) {
     payProvider: "cashfree";
     keyId: string;
     pendingCheckouts?: PendingFeeCheckout[];
+    platformFee?: number;
+    settlementReady?: boolean;
   }>(`/api/family/fees.php?studentId=${encodeURIComponent(studentId)}`);
 }
 

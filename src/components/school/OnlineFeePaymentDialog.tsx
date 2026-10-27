@@ -157,9 +157,13 @@ export function OnlineFeePaymentDialog({
               Amount to collect
             </div>
             <div className="mt-1 font-mono text-[22px] font-semibold text-[#0F766E]">
-              {formatMoney(amount)}
+              {formatMoney(link?.chargeAmount ?? amount)}
             </div>
-            {feeSummary ? (
+            {link?.platformFee && link.platformFee > 0 ? (
+              <div className="mt-1 text-[12px] text-black/55">
+                Fees {formatMoney(link.amount)} + platform {formatMoney(link.platformFee)}
+              </div>
+            ) : feeSummary ? (
               <div className="mt-1 text-[12px] text-black/55">{feeSummary}</div>
             ) : null}
           </div>
