@@ -28,7 +28,14 @@
 
   body {
     overflow-x: clip;
-    scrollbar-gutter: stable;
+  }
+
+  /* Permanent scrollbar gutters only on desktop — on mobile they fight Radix
+     scroll-lock (profile/account menus) and can collapse the layout width. */
+  @media (min-width: 1024px) {
+    body {
+      scrollbar-gutter: stable;
+    }
   }
   .font-mono {
     font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -408,8 +415,9 @@
   }
 
   .mobile-app-rail {
+    box-sizing: border-box;
     width: 100%;
-    max-width: 520px;
+    max-width: min(520px, 100%);
     margin-inline: auto;
   }
 

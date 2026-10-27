@@ -519,7 +519,11 @@ import {
   isFinanceBulkUnsupported,
 } from "@/lib/api/records";
 import { apiGlSyncCatalogs, type GlJournal } from "@/lib/api/general-ledger";
-import { apiSaveDashboardTodos } from "@/lib/api/dashboard";
+import {
+  apiFetchDashboardSummary,
+  apiSaveDashboardTodos,
+  type DashboardSummary,
+} from "@/lib/api/dashboard";
 import { apiUploadDataUrl } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import {
@@ -1099,6 +1103,10 @@ function IncomeExpenseSummaryTiles({
 type PremiumDashboardProps = {
   students: Student[];
   staff: Staff[];
+  /** Prefer these when the full roster is still hydrating. */
+  overviewStudentCount?: number;
+  overviewStaffCount?: number;
+  overviewActiveStaff?: number;
   periodIncome: number;
   expenseTotal: number;
   periodReceiptCount: number;
@@ -1125,6 +1133,8 @@ type PremiumDashboardProps = {
   onDownloadReceipt: (payment: Payment) => void;
   onOpenTransferReports?: () => void;
   expensesReady?: boolean;
+  /** Soft pending for finance tiles while books finish loading. */
+  booksPending?: boolean;
 };
 
 /** Isolated from PremiumDashboard so typing todos/notes does not re-render charts. */
@@ -1379,6 +1389,9 @@ function DashboardTodoNotesPanel() {
 function PremiumDashboard({
   students,
   staff,
+  overviewStudentCount,
+  overviewStaffCount,
+  overviewActiveStaff,
   periodIncome,
   expenseTotal,
   periodReceiptCount,
@@ -1405,6 +1418,7 @@ function PremiumDashboard({
   onDownloadReceipt,
   onOpenTransferReports,
   expensesReady = true,
+  booksPending = false,
 }: PremiumDashboardProps) {
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -1420,9 +1434,16 @@ function PremiumDashboard({
   const inBank = cashPosition.bank;
   const totalBalance = cashPosition.total;
   const bankLines = cashPosition.lines.filter((l) => l.kind === "bank");
-  const cashReady = expensesReady && cashPosition.ready;
+  const cashReady = expensesReady && cashPosition.ready && !booksPending;
+  const studentCount =
+    typeof overviewStudentCount === "number" ? overviewStudentCount : liveStudents.length;
   const paidCount = feePaidCount;
-  const activeStaff = liveStaff.filter((s) => s.active).length;
+  const staffCount =
+    typeof overviewStaffCount === "number" ? overviewStaffCount : liveStaff.length;
+  const activeStaff =
+    typeof overviewActiveStaff === "number"
+      ? overviewActiveStaff
+      : liveStaff.filter((s) => s.active).length;
   const payrollMonth = currentPayrollMonth();
   const myAttendance = useMemo(() => {
     if (!staffHome) return null;
@@ -1658,12 +1679,12 @@ function PremiumDashboard({
                 </div>
                 <div className="flex flex-1 flex-col items-center justify-center">
                   <div className={cn(dashboardCountClass, "text-emerald-950 dark:text-emerald-50")}>
-                    {liveStudents.length}
+                    {studentCount}
                   </div>
                   <div className="mt-1 text-[11px] font-medium text-emerald-800/80 dark:text-emerald-100/70">
                     {showFinanceChrome
-                      ? `${paidCount} paid · ${liveStudents.length - paidCount} with dues`
-                      : `${liveStudents.length} enrolled`}
+                      ? `${paidCount} paid · ${Math.max(0, studentCount - paidCount)} with dues`
+                      : `${studentCount} enrolled`}
                   </div>
                 </div>
               </button>
@@ -1685,10 +1706,10 @@ function PremiumDashboard({
                 </div>
                 <div className="flex flex-1 flex-col items-center justify-center">
                   <div className={cn(dashboardCountClass, "text-sky-950 dark:text-sky-50")}>
-                    {liveStaff.length}
+                    {staffCount}
                   </div>
                   <div className="mt-1 text-[11px] font-medium text-sky-800/75 dark:text-sky-100/70">
-                    {activeStaff} active · {liveStaff.length - activeStaff} inactive
+                    {activeStaff} active · {Math.max(0, staffCount - activeStaff)} inactive
                   </div>
                 </div>
               </button>
@@ -2302,12 +2323,8 @@ export function SchoolDashboard() {
     branchContentReady,
     booksOpening,
     activeBranch,
-    branches,
     schoolDetails,
     classes,
-    activeFeeTerms,
-    transportRoutes,
-    studentFeeBreaks,
   } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
   const classScopeStaffId = sessionStaffClassScopeId(session);
@@ -2330,6 +2347,18 @@ export function SchoolDashboard() {
   }, [staff, selfStaffId]);
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+
+  const branchKey = activeBranch?.id || "";
+  useEffect(() => {
+    let cancelled = false;
+    void apiFetchDashboardSummary(academicYear).then((data) => {
+      if (!cancelled && data) setSummary(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [academicYear, branchKey]);
 
   const printRecentReceipt = useCallback(
     async (payment: Payment) => {
@@ -2365,70 +2394,119 @@ export function SchoolDashboard() {
     },
     [academicYear, schoolDetails, schoolName, students],
   );
+  const booksReady = hydrated && branchContentReady;
   const tenantScope = `${session?.tenantId ?? session?.tenantName ?? "tenant"}|${academicYear}`;
   const { disbursements, loaded: disbursementsLoaded } = useDisbursements(
     tenantScope,
-    hydrated && branchContentReady,
+    booksReady,
   );
 
   const [period, setPeriod] = useState<PaymentPeriod>("all");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
 
-  const feeRoster = useMemo(
-    () =>
-      sumStudentFeeRoster({
-        students: students.filter((s) => !isRecordDeleted(s.deletedAt)),
-        payments,
-        classes,
-        feeTerms: activeFeeTerms,
-        transportRoutes,
-        academicYear,
-        feeBreaks: studentFeeBreaks,
-      }),
-    [students, payments, classes, activeFeeTerms, transportRoutes, academicYear, studentFeeBreaks],
-  );
-  const totalDue = feeRoster.outstanding;
+  // O(n) due-field totals — same ledger the directory heals toward fee statements.
+  const feeTotals = useMemo(() => {
+    const live = scopedStudents.filter((s) => !isRecordDeleted(s.deletedAt));
+    let outstanding = 0;
+    let outstandingCount = 0;
+    let paidCount = 0;
+    for (const student of live) {
+      const due = Math.max(0, Number(student.due) || 0);
+      if (due > 0) {
+        outstanding += due;
+        outstandingCount += 1;
+      } else {
+        paidCount += 1;
+      }
+    }
+    return { outstanding, outstandingCount, paidCount, studentCount: live.length };
+  }, [scopedStudents]);
+
+  const liveStaffTotals = useMemo(() => {
+    const live = scopedStaff.filter((s) => !isRecordDeleted(s.deletedAt));
+    const active = live.filter((s) => s.active).length;
+    return { total: live.length, active };
+  }, [scopedStaff]);
+
+  const overviewFromSummary = !booksReady && summary !== null;
+  const overviewStudentCount = overviewFromSummary
+    ? summary.totalStudents
+    : feeTotals.studentCount;
+  const overviewStaffCount = overviewFromSummary ? summary.totalStaff : liveStaffTotals.total;
+  const overviewActiveStaff = overviewFromSummary
+    ? summary.activeStaff
+    : liveStaffTotals.active;
+  const feePaidCount = overviewFromSummary ? summary.studentsPaid : feeTotals.paidCount;
+  const outstandingStudentCount = overviewFromSummary
+    ? summary.studentsWithDue
+    : feeTotals.outstandingCount;
+  const totalDue = overviewFromSummary
+    ? summary.outstandingPayments
+    : feeTotals.outstanding;
 
   const filteredPayments = useMemo(
-    () => filterPaymentsByPeriod(payments, period, customRange),
-    [payments, period, customRange],
+    () => (booksReady ? filterPaymentsByPeriod(payments, period, customRange) : []),
+    [booksReady, payments, period, customRange],
   );
 
-  const periodIncome = useMemo(
-    () => filteredPayments.reduce((acc, p) => acc + p.amount, 0),
-    [filteredPayments],
-  );
+  const periodIncome = useMemo(() => {
+    if (!booksReady && summary) {
+      if (period === "this_month") return summary.monthIncome;
+      if (period === "all") return summary.totalIncome;
+    }
+    return filteredPayments.reduce((acc, p) => acc + p.amount, 0);
+  }, [booksReady, summary, period, filteredPayments]);
 
   const cashbookCash = useMemo(
-    () => cashOnHand(payments, disbursements),
-    [payments, disbursements],
+    () => (booksReady ? cashOnHand(payments, disbursements) : 0),
+    [booksReady, payments, disbursements],
   );
   const cashbookBank = useMemo(
-    () => bankBalance(payments, disbursements),
-    [payments, disbursements],
+    () => (booksReady ? bankBalance(payments, disbursements) : 0),
+    [booksReady, payments, disbursements],
   );
-  const cashPosition = useCashPosition(cashbookCash, cashbookBank, disbursementsLoaded);
-  const expenseTotal = useMemo(
-    () => operatingExpenseForPeriod(disbursements, period, customRange),
-    [disbursements, period, customRange],
+  const cashPosition = useCashPosition(
+    cashbookCash,
+    cashbookBank,
+    booksReady && disbursementsLoaded,
   );
+  const expenseTotal = useMemo(() => {
+    if (!booksReady && summary) {
+      if (period === "this_month") return summary.monthExpenses;
+      if (period === "all") return summary.totalExpenses;
+    }
+    return operatingExpenseForPeriod(disbursements, period, customRange);
+  }, [booksReady, summary, period, disbursements, customRange]);
   const periodExpenseRows = useMemo(
     () =>
-      filterDisbursementsByPeriod(disbursements, period, customRange)
-        .filter(isClearedDisbursement)
-        .map((row) => ({ time: row.time, amount: row.amount })),
-    [disbursements, period, customRange],
+      booksReady
+        ? filterDisbursementsByPeriod(disbursements, period, customRange)
+            .filter(isClearedDisbursement)
+            .map((row) => ({ time: row.time, amount: row.amount }))
+        : [],
+    [booksReady, disbursements, period, customRange],
   );
-  const periodExpenseCount = useMemo(
-    () =>
-      filterDisbursementsByPeriod(disbursements, period, customRange).filter(isClearedDisbursement)
-        .length,
-    [disbursements, period, customRange],
+  const periodExpenseCount = useMemo(() => {
+    if (!booksReady && summary && period === "this_month") return summary.monthExpenseCount;
+    return filterDisbursementsByPeriod(disbursements, period, customRange).filter(
+      isClearedDisbursement,
+    ).length;
+  }, [booksReady, summary, period, disbursements, customRange]);
+  const periodReceiptCount = useMemo(() => {
+    if (!booksReady && summary && period === "this_month") return summary.monthReceiptCount;
+    return filteredPayments.length;
+  }, [booksReady, summary, period, filteredPayments.length]);
+  const salaryOutstandingRows = useMemo(
+    () => (booksReady ? queuedSalaryPayables(disbursements) : []),
+    [booksReady, disbursements],
   );
-  const salaryOutstandingRows = useMemo(() => queuedSalaryPayables(disbursements), [disbursements]);
-  const salaryOutstanding = useMemo(() => salaryPayable(disbursements), [disbursements]);
+  const salaryOutstanding = useMemo(
+    () => (booksReady ? salaryPayable(disbursements) : 0),
+    [booksReady, disbursements],
+  );
 
   const recentReceipts = useMemo(() => {
+    if (!booksReady) return [];
     const income: Payment[] = payments.slice();
     const expenses: Payment[] = disbursements.filter(isClearedDisbursement).map((row) => ({
       id: row.id || `DISB-${row.payee}-${row.time || ""}`,
@@ -2441,16 +2519,17 @@ export function SchoolDashboard() {
     return [...income, ...expenses]
       .sort((a, b) => (b.time || "").localeCompare(a.time || ""))
       .slice(0, 5);
-  }, [payments, disbursements]);
+  }, [booksReady, payments, disbursements]);
 
-  if (!hydrated || !branchContentReady || booksOpening) {
+  // Paint School Overview as soon as summary arrives; don't blank the page for booksOpening.
+  if (!booksReady && !summary) {
     return (
       <WorkspaceOpeningScreen
         label={booksOpening ? `Opening ${booksOpening} books` : "Opening dashboard"}
         detail={
           booksOpening
             ? "Loading enrollments, receipts, and fee schedules for this year…"
-            : "Loading school overview and books…"
+            : "Loading school overview…"
         }
       />
     );
@@ -2459,21 +2538,25 @@ export function SchoolDashboard() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <PremiumDashboard
-        students={scopedStudents}
-        staff={scopedStaff}
+        students={booksReady ? scopedStudents : []}
+        staff={booksReady ? scopedStaff : []}
+        overviewStudentCount={overviewStudentCount}
+        overviewStaffCount={overviewStaffCount}
+        overviewActiveStaff={overviewActiveStaff}
         periodIncome={periodIncome}
         expenseTotal={expenseTotal}
-        periodReceiptCount={filteredPayments.length}
+        periodReceiptCount={periodReceiptCount}
         periodExpenseCount={periodExpenseCount}
         periodPayments={filteredPayments}
         periodExpenses={periodExpenseRows}
         totalDue={totalDue}
-        outstandingStudentCount={feeRoster.outstandingCount}
-        feePaidCount={feeRoster.paidCount}
+        outstandingStudentCount={outstandingStudentCount}
+        feePaidCount={feePaidCount}
         salaryOutstanding={salaryOutstanding}
         salaryOutstandingStaff={salaryOutstandingRows.length}
         cashPosition={cashPosition}
-        expensesReady={disbursementsLoaded}
+        expensesReady={booksReady && disbursementsLoaded}
+        booksPending={!booksReady || Boolean(booksOpening)}
         recentReceipts={recentReceipts}
         period={period}
         setPeriod={setPeriod}
@@ -23887,7 +23970,9 @@ function CategoriesCard({
   const requestDelete = (year: string) => {
     const check = canDeleteAcademicYear(year);
     if (!check.ok) {
-      toast.error(check.reason ?? "Cannot delete this year");
+      toast.error(check.reason ?? "Cannot delete this year", {
+        description: "Rename the year or close the books. Receipts are never deleted with a year.",
+      });
       return;
     }
     setPendingYearDelete(year);
@@ -24333,22 +24418,27 @@ function CategoriesCard({
         onOpenChange={(next) => {
           if (!next) setPendingYearDelete(null);
         }}
-        title="Hard delete financial year"
+        title={
+          pendingDeleteImpact && pendingDeleteImpact.receipts > 0
+            ? "Cannot delete financial year"
+            : "Remove empty financial year"
+        }
         description={
           pendingYearDelete
-            ? [
-                `Permanently remove "${pendingYearDelete}" and all of its year books data.`,
-                pendingDeleteImpact
-                  ? `This will delete ${pendingDeleteImpact.receipts} receipt${pendingDeleteImpact.receipts === 1 ? "" : "s"}, ${pendingDeleteImpact.enrolled} enrollment${pendingDeleteImpact.enrolled === 1 ? "" : "s"}, and ${pendingDeleteImpact.periods} fee period${pendingDeleteImpact.periods === 1 ? "" : "s"}.`
-                  : null,
-                pendingYearDelete === academicYear
-                  ? "The next available year will become open books."
-                  : null,
-                "This cannot be undone.",
-              ]
-                .filter(Boolean)
-                .join(" ")
-            : "Hard delete this financial year?"
+            ? pendingDeleteImpact && pendingDeleteImpact.receipts > 0
+              ? `"${pendingYearDelete}" has ${pendingDeleteImpact.receipts} receipt${pendingDeleteImpact.receipts === 1 ? "" : "s"} on file. Feezo never deletes receipts with a year. Rename this year or close the books instead.`
+              : [
+                  `Remove "${pendingYearDelete}" from the year list.`,
+                  pendingDeleteImpact
+                    ? `This clears ${pendingDeleteImpact.enrolled} enrollment${pendingDeleteImpact.enrolled === 1 ? "" : "s"} and ${pendingDeleteImpact.periods} fee period${pendingDeleteImpact.periods === 1 ? "" : "s"} for that empty year. Receipts are never deleted.`
+                    : null,
+                  pendingYearDelete === academicYear
+                    ? "The next available year will become open books."
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ")
+            : "Remove this financial year?"
         }
         onConfirm={confirmYearDelete}
       />

@@ -44,8 +44,8 @@ export function TopNav() {
   const activeLabel = ADMIN_NAV.find((n) => n.key === active)?.label ?? "Overview";
 
   return (
-    <header className="sticky top-0 z-30 bg-[#F4F6F9]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 sm:pt-[calc(1rem+env(safe-area-inset-top))] lg:border-b lg:border-[#E5E5E5]/60 lg:bg-[#F4F6F9]/92 lg:px-6 lg:pb-3 lg:pt-[calc(1.25rem+env(safe-area-inset-top))] lg:backdrop-blur-xl">
-      <div className="mobile-app-rail flex min-w-0 items-center justify-between gap-2 rounded-xl border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] sm:gap-3 lg:mx-auto lg:max-w-[1480px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+    <header className="sticky top-0 z-30 max-w-[100vw] overflow-x-clip bg-[#F4F6F9]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 sm:pt-[calc(1rem+env(safe-area-inset-top))] lg:border-b lg:border-[#E5E5E5]/60 lg:bg-[#F4F6F9]/92 lg:px-6 lg:pb-3 lg:pt-[calc(1.25rem+env(safe-area-inset-top))] lg:backdrop-blur-xl">
+      <div className="mobile-app-rail mx-auto flex min-w-0 items-center justify-between gap-2 rounded-xl border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] sm:gap-3 lg:max-w-[1480px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
         <Link to="/super-admin/overview" className="flex min-w-0 shrink items-center">
           <FeezoBrand subtitle={activeLabel} markClassName="h-10 w-10" className="lg:hidden" />
           <FeezoBrand
@@ -101,7 +101,7 @@ export function TopNav() {
             <Bell className="h-4 w-4" />
             <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[#0F766E]" />
           </button>
-          <DropdownMenu>
+          <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <button
                 className="grid h-10 w-10 place-items-center rounded-full bg-black text-[12px] font-semibold text-white transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-black/30 sm:ml-1"
@@ -110,12 +110,17 @@ export function TopNav() {
                 {initials}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60 rounded-lg">
-              <DropdownMenuLabel className="flex flex-col gap-0.5">
-                <span className="text-[12px] font-semibold text-black">
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              collisionPadding={12}
+              className="z-[250] w-[min(15rem,calc(100vw-2rem))] rounded-lg"
+            >
+              <DropdownMenuLabel className="flex min-w-0 flex-col gap-0.5">
+                <span className="truncate text-[12px] font-semibold text-black">
                   {session?.displayName ?? "Super Admin"}
                 </span>
-                <span className="font-mono text-[10.5px] text-black/55">
+                <span className="truncate font-mono text-[10.5px] text-black/55">
                   {session?.email ?? "—"}
                 </span>
               </DropdownMenuLabel>

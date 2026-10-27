@@ -34,7 +34,13 @@ export type { BranchWorkspaceBundle, BranchOperationalBundle } from "@/lib/api/t
 export { fetchTenantSubscription } from "@/lib/api/subscription";
 export type { TenantSubscription } from "@/lib/api/subscription";
 export { fetchSupportDesk, fetchSupportTickets, fetchSuperAdminSupport } from "@/lib/api/support";
-export { apiFetchDashboardTodos, apiSaveDashboardTodos } from "@/lib/api/dashboard";
+export {
+  apiFetchDashboardSummary,
+  apiFetchDashboardTodos,
+  apiSaveDashboardTodos,
+  prefetchDashboardSummary,
+} from "@/lib/api/dashboard";
+export type { DashboardSummary } from "@/lib/api/dashboard";
 export {
   fetchSuperAdminTenants,
   provisionSuperAdminTenant,

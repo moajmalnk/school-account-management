@@ -15,7 +15,7 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -63,6 +63,7 @@ import {
   sessionStaffClassScopeId,
 } from "@/lib/auth";
 import { apiMe } from "@/lib/api/auth";
+import { apiFetchDashboardSummary } from "@/lib/api/dashboard";
 import { resolveMediaUrl } from "@/lib/media";
 import {
   normalizePlanFlags,
@@ -151,6 +152,12 @@ function TenantShell() {
   const { session, updateSession } = useAuth();
   const { themeSettings, hydrated, branchSyncing, activeBranchId, branches, openBranch } =
     useTenantStore();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isDashboardRoute =
+    pathname === "/tenant" ||
+    pathname === "/tenant/" ||
+    pathname.startsWith("/tenant/dashboard");
+  const [dashboardSummaryReady, setDashboardSummaryReady] = useState(false);
   const placement = themeSettings.navPlacement ?? "Left";
   const isVertical = placement === "Left" || placement === "Right";
   const isBottom = placement === "Bottom";
@@ -160,6 +167,18 @@ function TenantShell() {
   useEffect(() => {
     void import("@/components/school/SchoolAdminWorkspace");
   }, []);
+
+  // Unblock Home as soon as lightweight COUNT/SUM summary returns.
+  useEffect(() => {
+    if (hydrated || !isDashboardRoute) return;
+    let cancelled = false;
+    void apiFetchDashboardSummary().then((data) => {
+      if (!cancelled && data) setDashboardSummaryReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, isDashboardRoute]);
 
   // Refresh subscription plan flags so Super Admin Plan toggles apply without re-login.
   useEffect(() => {
@@ -234,7 +253,7 @@ function TenantShell() {
             )}
           >
             <AcademicYearBooksFade>
-              {!hydrated ? (
+              {!hydrated && !(isDashboardRoute && dashboardSummaryReady) ? (
                 <WorkspaceOpeningScreen
                   label="Opening workspace"
                   detail="Preparing campus data for this school…"

@@ -25,8 +25,8 @@ const MOBILE_TABS: MobileTabItem[] = ADMIN_NAV.map((n) => ({
 
 function TopNavSkeleton() {
   return (
-    <header className="sticky top-0 z-30 bg-[#F4F6F9]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 sm:pt-[calc(1rem+env(safe-area-inset-top))] lg:border-b lg:border-[#E5E5E5]/60 lg:bg-[#F4F6F9]/92 lg:px-6 lg:pb-3 lg:pt-[calc(1.25rem+env(safe-area-inset-top))] lg:backdrop-blur-xl">
-      <div className="mobile-app-rail flex min-w-0 items-center justify-between gap-2 rounded-xl border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] sm:gap-3 lg:mx-auto lg:max-w-[1480px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+    <header className="sticky top-0 z-30 max-w-[100vw] overflow-x-clip bg-[#F4F6F9]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 sm:pt-[calc(1rem+env(safe-area-inset-top))] lg:border-b lg:border-[#E5E5E5]/60 lg:bg-[#F4F6F9]/92 lg:px-6 lg:pb-3 lg:pt-[calc(1.25rem+env(safe-area-inset-top))] lg:backdrop-blur-xl">
+      <div className="mobile-app-rail mx-auto flex min-w-0 items-center justify-between gap-2 rounded-xl border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] sm:gap-3 lg:max-w-[1480px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
         <div className="flex min-w-0 shrink items-center gap-2.5">
           <Skeleton className="h-10 w-10 shrink-0 rounded-2xl bg-black/10" />
           <div className="space-y-1.5">
@@ -69,13 +69,13 @@ function SuperAdminLayout() {
   if (!hydrated) {
     return (
       <div
-        className="min-h-dvh bg-[#F4F6F9] text-black"
+        className="min-h-dvh w-full max-w-[100vw] overflow-x-clip bg-[#F4F6F9] text-black"
         aria-busy="true"
         aria-label="Loading control plane"
       >
         <TopNavSkeleton />
         <main
-          className={`mobile-app-rail min-w-0 scroll-pb-[calc(60px+0.75rem+env(safe-area-inset-bottom))] px-3 pb-6 pt-4 sm:px-4 sm:pt-6 lg:mx-auto lg:max-w-[1480px] lg:scroll-pb-24 lg:px-6 lg:pb-24 lg:pt-8 ${mobileMainPadding}`}
+          className={`mobile-app-rail mx-auto min-w-0 scroll-pb-[calc(60px+0.75rem+env(safe-area-inset-bottom))] px-3 pb-6 pt-4 sm:px-4 sm:pt-6 lg:max-w-[1480px] lg:scroll-pb-24 lg:px-6 lg:pb-24 lg:pt-8 ${mobileMainPadding}`}
         >
           {pathname.startsWith("/super-admin/tenants") ? (
             <TenantsViewSkeleton />
@@ -109,10 +109,10 @@ function SuperAdminLayout() {
   }
 
   return (
-    <div className="min-h-dvh bg-[#F4F6F9] text-black">
+    <div className="min-h-dvh w-full max-w-[100vw] overflow-x-clip bg-[#F4F6F9] text-black">
       <TopNav />
       <main
-        className={`mobile-app-rail min-w-0 scroll-pb-[calc(60px+0.75rem+env(safe-area-inset-bottom))] px-3 pb-6 pt-4 sm:px-4 sm:pt-6 lg:mx-auto lg:max-w-[1480px] lg:scroll-pb-24 lg:px-6 lg:pb-24 lg:pt-8 ${mobileMainPadding}`}
+        className={`mobile-app-rail mx-auto min-w-0 scroll-pb-[calc(60px+0.75rem+env(safe-area-inset-bottom))] px-3 pb-6 pt-4 sm:px-4 sm:pt-6 lg:max-w-[1480px] lg:scroll-pb-24 lg:px-6 lg:pb-24 lg:pt-8 ${mobileMainPadding}`}
       >
         <Outlet />
       </main>

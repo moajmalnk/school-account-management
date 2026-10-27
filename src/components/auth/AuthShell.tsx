@@ -154,7 +154,7 @@ function HeroBlock({ compact }: { compact?: boolean }) {
   }
 
   return (
-    <div className="relative mt-auto w-full overflow-visible pt-2 lg:-mr-24 lg:pt-4 xl:-mr-32 xl:pt-6">
+    <div className="relative mt-8 w-full overflow-visible pt-2 lg:-mr-24 lg:mt-10 lg:pt-4 xl:-mr-32 xl:mt-12 xl:pt-6">
       <div
         aria-hidden
         className="pointer-events-none absolute -inset-[6%] -z-0 rounded-[46%] bg-[radial-gradient(ellipse_at_55%_60%,_#D8F3EA_0%,_#E8F8F2_38%,_transparent_70%)] blur-[2px]"
@@ -211,37 +211,38 @@ function BrandPanel({ compact }: { compact?: boolean }) {
     <div
       className={cn(
         "relative flex min-h-0 w-full flex-col",
-        compact
-          ? "items-stretch gap-0 pb-1 pt-1"
-          : "h-full min-h-[min(100%,640px)] justify-between py-1",
+        compact ? "items-stretch gap-0 pb-1 pt-1" : "w-full max-w-[36rem] py-1",
       )}
     >
       <div className={cn("relative z-[1] w-full", compact && "mx-auto w-full max-w-md")}>
         <LoginBrand size={compact ? "sm" : "md"} />
 
-        <h1
-          className={cn(
-            "mt-5 font-bold tracking-tight text-[#0B1B33]",
-            compact
-              ? "max-w-[18.5rem] text-[24px] leading-[1.2] sm:max-w-[22rem] sm:text-[28px]"
-              : "max-w-[26rem] text-[30px] leading-[1.16] sm:text-[34px] xl:text-[38px]",
-          )}
-          style={{ fontFamily: '"Plus Jakarta Sans", Inter, system-ui, sans-serif' }}
-        >
-          Simplifying <span className="text-[#0F766E]">School Management</span> Every Day
-        </h1>
-        <p
-          className={cn(
-            "mt-3 text-[#64748B]",
-            compact
-              ? "max-w-[20rem] text-[13.5px] leading-relaxed sm:max-w-md sm:text-[14px]"
-              : "max-w-[28rem] text-[14.5px] leading-relaxed sm:text-[15px]",
-          )}
-        >
-          Manage students, fees, accounts and more — all in one place.
-        </p>
+        {/* Desktop: nudge copy below the logo without stretching the column */}
+        <div className={cn(!compact && "mt-10 lg:mt-12")}>
+          <h1
+            className={cn(
+              "font-bold tracking-tight text-[#0B1B33]",
+              compact
+                ? "mt-5 max-w-[18.5rem] text-[24px] leading-[1.2] sm:max-w-[22rem] sm:text-[28px]"
+                : "max-w-[26rem] text-[30px] leading-[1.16] sm:text-[34px] xl:text-[38px]",
+            )}
+            style={{ fontFamily: '"Plus Jakarta Sans", Inter, system-ui, sans-serif' }}
+          >
+            Simplifying <span className="text-[#0F766E]">School Management</span> Every Day
+          </h1>
+          <p
+            className={cn(
+              "mt-3 text-[#64748B]",
+              compact
+                ? "max-w-[20rem] text-[13.5px] leading-relaxed sm:max-w-md sm:text-[14px]"
+                : "max-w-[28rem] text-[14.5px] leading-relaxed sm:text-[15px]",
+            )}
+          >
+            Manage students, fees, accounts and more — all in one place.
+          </p>
 
-        <FeatureRow compact={compact} />
+          <FeatureRow compact={compact} />
+        </div>
       </div>
 
       <HeroBlock compact={compact} />
@@ -300,19 +301,19 @@ export function AuthShell({
     <div className="relative min-h-dvh overflow-x-hidden bg-[#F7FCFA]">
       <WaveBackdrop />
 
-      <div className="relative mx-auto grid min-h-dvh w-full max-w-[1180px] grid-cols-1 gap-y-1 px-5 py-[calc(1rem+env(safe-area-inset-top))] sm:px-6 lg:grid-cols-[1fr_420px] lg:items-stretch lg:gap-x-8 lg:gap-y-0 lg:px-10 lg:py-8 xl:grid-cols-[1.05fr_440px] xl:gap-x-12 xl:px-12">
-        {/* Marketing — single panel, responsive via compact/desktop CSS inside */}
-        <div className="relative z-0 min-w-0 lg:flex lg:h-full lg:flex-col lg:pb-2">
+      <div className="relative mx-auto grid min-h-dvh w-full max-w-[1180px] grid-cols-1 content-center gap-y-1 px-5 py-[calc(1rem+env(safe-area-inset-top))] sm:px-6 lg:grid-cols-[1fr_420px] lg:items-center lg:gap-x-8 lg:gap-y-0 lg:px-10 lg:py-8 xl:grid-cols-[1.05fr_440px] xl:gap-x-12 xl:px-12">
+        {/* Marketing — natural-height stack (avoids full-viewport stretch on tall screens) */}
+        <div className="relative z-0 min-w-0 lg:pb-2">
           <div className="lg:hidden">
             <BrandPanel compact />
           </div>
-          <div className="hidden h-full min-h-0 lg:flex lg:flex-col">
+          <div className="hidden lg:block">
             <BrandPanel />
           </div>
         </div>
 
-        {/* Sign-in card + legal — centered under card on all sizes */}
-        <div className="relative z-10 flex min-w-0 flex-col justify-center pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-5 lg:pb-6 lg:pt-0">
+        {/* Sign-in card + legal */}
+        <div className="relative z-10 flex min-w-0 flex-col justify-center pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-5 lg:pb-0 lg:pt-0">
           <div className="mx-auto w-full max-w-[400px] sm:max-w-[420px] lg:max-w-none">
             <div className="w-full rounded-[24px] border border-[#EEF2F0] bg-white px-5 py-6 shadow-[0_24px_64px_-24px_rgba(15,50,40,0.28)] sm:rounded-[32px] sm:px-8 sm:py-8 lg:px-9 lg:py-9">
               <div className="relative pr-24 sm:pr-28">

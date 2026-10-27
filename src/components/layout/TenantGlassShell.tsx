@@ -140,10 +140,18 @@ function BooksYearSkeleton({ year, pathname }: { year: string; pathname: string 
 export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
   const { activeBranch, branchSyncing, branchContentReady, booksOpening } = useTenantStore();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isDashboardRoute =
+    pathname === "/tenant" ||
+    pathname === "/tenant/" ||
+    pathname.startsWith("/tenant/dashboard");
 
   const yearBusy = Boolean(booksOpening);
   const branchBlocking = branchSyncing && !branchContentReady;
-  const branchSoft = branchSyncing && branchContentReady && !yearBusy;
+  // Dashboard keeps School Overview visible during year settle (soft dim only).
+  const yearSoft = yearBusy && isDashboardRoute;
+  const yearHard = yearBusy && !isDashboardRoute;
+  const branchSoft =
+    (branchSyncing && branchContentReady && !yearHard) || yearSoft;
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -154,7 +162,7 @@ export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
         )}
         aria-busy={yearBusy || branchBlocking || branchSoft}
       >
-        {yearBusy && booksOpening ? (
+        {yearHard && booksOpening ? (
           <BooksYearSkeleton year={booksOpening} pathname={pathname} />
         ) : branchBlocking ? (
           <WorkspaceOpeningScreen

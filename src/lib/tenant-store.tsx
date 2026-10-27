@@ -17,6 +17,7 @@ import {
   type BranchWorkspaceBundle,
 } from "@/lib/api/tenant-sync";
 import { getApiToken } from "@/lib/api/client";
+import { prefetchDashboardSummary } from "@/lib/api/dashboard";
 import { readSession, sessionCanAccessBranch } from "@/lib/auth";
 import {
   apiDeleteFeeTerm,
@@ -4520,9 +4521,9 @@ type TenantStoreValue = {
   renameAcademicYear: (from: string, to: string) => { ok: boolean; reason?: string };
   /** Close (deactivate) or reopen a financial year. Closing the open year switches books. */
   setAcademicYearClosed: (year: string, closed: boolean) => { ok: boolean; reason?: string };
-  /** Whether a year can be hard-deleted (only blocked when it is the sole year). */
+  /** Whether a year can be removed (blocked when sole year or when receipts exist). */
   canDeleteAcademicYear: (year: string) => { ok: boolean; reason?: string };
-  /** Hard-delete a year and cascade local receipts, enrollments, and fee periods. */
+  /** Remove an empty year. Refuses when receipts exist — rename or close instead. */
   deleteAcademicYear: (year: string) => boolean;
   enrollStudentInActiveYear: (
     studentId: string,
@@ -5908,6 +5909,8 @@ export function TenantStoreProvider({
     const hydrate = async () => {
       // Prefer live API data when a JWT exists (school admin / impersonation).
       if (getApiToken()) {
+        // Warm School Overview counts in parallel with the heavy workspace bundle.
+        prefetchDashboardSummary(localSnap?.academicYear);
         try {
           const remote = await fetchRemoteTenantBundle(undefined, { tenantId });
           if (!cancelled && remote) {
@@ -6525,15 +6528,26 @@ export function TenantStoreProvider({
       if (academicYears.length <= 1) {
         return { ok: false, reason: "Keep at least one financial year" };
       }
+      const receiptCount = payments.filter((p) => (p.academicYear ?? "") === year).length;
+      if (receiptCount > 0) {
+        return {
+          ok: false,
+          reason: `Cannot delete ${year}: ${receiptCount} receipt${receiptCount === 1 ? "" : "s"} on file. Rename or close the year instead.`,
+        };
+      }
       return { ok: true };
     },
-    [academicYears],
+    [academicYears, payments],
   );
 
   const deleteAcademicYear = useCallback(
     (year: string) => {
       const check = canDeleteAcademicYear(year);
       if (!check.ok) return false;
+      // Defence in depth: never drop receipts even if a caller bypasses canDelete.
+      if (payments.some((p) => (p.academicYear ?? "") === year)) {
+        return false;
+      }
       const removedTerms = feeTerms.filter((t) => t.academicYear === year);
       const nextYears = academicYears.filter((y) => y !== year);
       const nextClosed = closedAcademicYears.filter((y) => y !== year);
@@ -6543,11 +6557,10 @@ export function TenantStoreProvider({
           : academicYear;
       setAcademicYears(nextYears);
       setClosedAcademicYears(nextClosed);
-      // Hard delete: wipe year-scoped books data locally.
+      // Empty-year cleanup only — receipts are never removed here.
       setFeeTerms((prev) => prev.filter((t) => t.academicYear !== year));
       setStudentFeeBreaks((prev) => prev.filter((b) => b.academicYear !== year));
       setStudentYearLedgers((prev) => prev.filter((l) => l.academicYear !== year));
-      setPayments((prev) => prev.filter((p) => p.academicYear !== year));
       setClasses((prev) => prev.filter((item) => taggedAcademicYear(item) !== year));
       setDepartments((prev) => prev.filter((item) => taggedAcademicYear(item) !== year));
       setRoles((prev) => prev.filter((item) => taggedAcademicYear(item) !== year));
@@ -6561,7 +6574,6 @@ export function TenantStoreProvider({
       if (getApiToken()) {
         void (async () => {
           try {
-            // Server sync removes the year and cascades fee terms / receipts / enrollments.
             await apiSyncAcademicYears({
               academicYears: nextYears,
               academicYear: nextActive,
@@ -6571,7 +6583,7 @@ export function TenantStoreProvider({
               await apiDeleteFeeTerm(term.id);
             }
           } catch {
-            /* local snapshot kept */
+            /* local snapshot kept; server may have blocked the year drop */
           }
         })();
       }
@@ -6584,6 +6596,7 @@ export function TenantStoreProvider({
       canDeleteAcademicYear,
       closedAcademicYears,
       feeTerms,
+      payments,
     ],
   );
 
