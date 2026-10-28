@@ -12,10 +12,10 @@ import { HELP_GLOSSARY } from "../src/lib/help/glossary";
 import { HELP_CATEGORIES, HELP_FAQS, HELP_GUIDES, type HelpAccess } from "../src/lib/help/guides";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-/** Vite app may keep a local copy; PHP AI loads feezo-backend/data/help_kb.json. */
+/** PHP AI loads feezo-backend/data/help_kb.json (canonical). Optional local mirror if present. */
 const outFiles = [
-  resolve(root, "backend/data/help_kb.json"),
   resolve(root, "../feezo-backend/data/help_kb.json"),
+  resolve(root, "backend/data/help_kb.json"),
 ];
 
 const categoryTitle = new Map(HELP_CATEGORIES.map((c) => [c.id, c.title]));
@@ -58,10 +58,20 @@ const kb = {
 };
 
 const payload = `${JSON.stringify(kb, null, 1)}\n`;
+const written: string[] = [];
 for (const outFile of outFiles) {
-  mkdirSync(dirname(outFile), { recursive: true });
-  writeFileSync(outFile, payload, "utf8");
+  try {
+    mkdirSync(dirname(outFile), { recursive: true });
+    writeFileSync(outFile, payload, "utf8");
+    written.push(outFile);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`skip ${outFile}: ${msg}`);
+  }
+}
+if (written.length === 0) {
+  throw new Error("Could not write help_kb.json to any output path");
 }
 console.log(
-  `help_kb.json: ${kb.guides.length} guides, ${kb.faqs.length} FAQs, ${kb.glossary.length} terms → ${outFiles.join(" · ")}`,
+  `help_kb.json: ${kb.guides.length} guides, ${kb.faqs.length} FAQs, ${kb.glossary.length} terms → ${written.join(" · ")}`,
 );

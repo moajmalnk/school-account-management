@@ -91,11 +91,11 @@ export function ParentPayCard() {
 
   const settlementHint =
     settlement?.settlementReady
-      ? `Parents pay fee + ₹${settlement.platformFee.toFixed(2)}. Your school receives the full fee${
+      ? `When bank settlement is live, parents pay fee + ₹${settlement.platformFee.toFixed(2)}. Your school receives the full fee${
           settlement.settlementAccountLast4 ? ` (·····${settlement.settlementAccountLast4})` : ""
         }; Feezo keeps the platform fee.`
       : settlement?.settlementEnabled
-        ? "Settlement setup is in progress. Feezo support will finish the Cashfree vendor before online pay can go live."
+        ? "School bank settlement is still being set up. Parents can pay the fee online now; Feezo transfers to the school bank until auto-settlement is live."
         : null;
 
   return (
@@ -208,9 +208,7 @@ export function ParentPayCard() {
             <p className="mt-0.5 text-[11.5px] leading-snug text-black/50 dark:text-zinc-400">
               {configured
                 ? "Turns on app checkout, Pay link, and Finance → Online."
-                : settlement?.settlementEnabled
-                  ? "School bank settlement is not ACTIVE yet."
-                  : "Cashfree is not connected for this school yet."}
+                : "Cashfree is not connected yet. Ask Feezo support."}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3 self-end sm:self-auto">
@@ -231,9 +229,7 @@ export function ParentPayCard() {
 
         {!configured ? (
           <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800 dark:border-rose-500/30 dark:bg-rose-950/30 dark:text-rose-200">
-            {settlement?.settlementEnabled
-              ? "Settlement setup in progress. Ask Feezo support when the Cashfree vendor is ACTIVE."
-              : "Online payment is not configured. Ask Feezo support to connect Cashfree for this school."}
+            Online payment is not configured. Ask Feezo support to connect Cashfree for this school.
           </p>
         ) : null}
         {error ? (

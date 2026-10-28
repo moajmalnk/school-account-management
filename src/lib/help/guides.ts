@@ -621,7 +621,7 @@ export const HELP_GUIDES: HelpGuide[] = [
     ],
     warning:
       "Always confirm Campus and Academic Year in the top bar before saving. Receipts belong to the campus and year that were open when you recorded them.",
-    related: ["fees-report", "daybook", "fee-break", "daily-ops"],
+    related: ["fees-report", "daybook", "fee-break", "daily-ops", "parent-pay"],
   },
   {
     id: "make-payment",
@@ -761,7 +761,7 @@ export const HELP_GUIDES: HelpGuide[] = [
         tip: "Every student in this class inherits this schedule, so dues on their profile fill in automatically.",
       },
     ],
-    related: ["ledgers-setup", "concessions", "admit-student", "receive-payment"],
+    related: ["ledgers-setup", "concessions", "admit-student", "receive-payment", "parent-pay"],
   },
   {
     id: "ledgers-setup",
@@ -1678,7 +1678,68 @@ export const HELP_GUIDES: HelpGuide[] = [
         tip: "Parents do not use Continue with Google — that is only for staff email accounts on /login.",
       },
     ],
-    related: ["student-profile", "google-sign-in", "mobile-app"],
+    related: ["student-profile", "google-sign-in", "mobile-app", "parent-pay"],
+  },
+  {
+    id: "parent-pay",
+    category: "settings",
+    title: "Enable online fee payment (Parent Pay)",
+    summary:
+      "Turn on Parent Pay so guardians can pay student fees online with Cashfree — in the parent app, via WhatsApp Pay link, or at the counter.",
+    minutes: 3,
+    access: { kind: "settings", tab: "fees" },
+    procedure: "setup",
+    keywords: [
+      "online payment",
+      "enable online payment",
+      "parent pay",
+      "parent pay now",
+      "cashfree",
+      "pay online",
+      "online fees",
+      "upi payment",
+      "pay link",
+      "whatsapp payment",
+      "gateway",
+      "payment gateway",
+      "card payment",
+      "net banking",
+      "allow parents to pay",
+    ],
+    openTo: { href: "/tenant/settings?tab=fees", label: "Open Fee Category · Parent Pay" },
+    warning:
+      "Schools do not enter Razorpay, Stripe, or Cashfree API keys. Feezo runs Cashfree for you. If Parent Pay shows that Cashfree is not connected, ask Feezo support.",
+    flowchart: {
+      title: "Parent Pay setup",
+      mermaid: `flowchart LR
+  fees[Settings_Fee_Category] --> toggle[Allow_parents_to_pay_online_On]
+  toggle --> save[Save]
+  save --> parents[Parents_pay_in_Family_app]
+  save --> link[WhatsApp_Pay_link]
+  save --> desk[Finance_Online_at_counter]`,
+    },
+    steps: [
+      {
+        title: "Open Fee Category",
+        body: "Go to **Settings → Fee Category**. The **Parent Pay now** card sits at the top of this tab (not under Subscription or System).",
+        image: IMG.studentPayments,
+      },
+      {
+        title: "Turn Parent Pay on",
+        body: "Set **Allow parents to pay online** to **On**, then tap **Save**. Checkout uses **Cashfree** (UPI / card / net banking). You do not paste gateway credentials here.",
+        tip: "If the switch is locked or you see that Cashfree is not connected, contact Feezo support — they connect the school to Feezo’s Cashfree merchant.",
+      },
+      {
+        title: "Keep guardian mobiles ready",
+        body: "Online checkout needs a **10-digit guardian mobile** on the student profile. Parents sign in at **feezo.app/login** with that phone and pay under **Fees**.",
+      },
+      {
+        title: "How parents and staff collect",
+        body: "**Parent app** — due fees → Pay. **Student profile / Payments** — share a WhatsApp **Pay link**. **Finance → Receive** — use **Online** at the counter so Cashfree opens on this device.",
+        tip: "Settings → Subscription is only for renewing your Feezo school plan, not for student fee gateway keys.",
+      },
+    ],
+    related: ["parent-portal", "receive-payment", "classes-fees", "live-support"],
   },
   {
     id: "transport",
@@ -1731,7 +1792,8 @@ export const HELP_GUIDES: HelpGuide[] = [
     id: "subscription",
     category: "subscription",
     title: "Your plan, renewal and invoices",
-    summary: "See what your plan includes and renew in a few taps.",
+    summary:
+      "Renew your Feezo school subscription (SaaS plan) — not student fee Parent Pay.",
     minutes: 2,
     keywords: [
       "subscription",
@@ -1742,12 +1804,14 @@ export const HELP_GUIDES: HelpGuide[] = [
       "billing",
       "trial",
       "premium",
+      "saas",
+      "feezo plan",
     ],
     openTo: { href: "/tenant/settings?tab=subscription", label: "Open Subscription" },
     steps: [
       {
         title: "Open Subscription",
-        body: "Settings → Subscription shows your plan, Renewal date, Auto-renewal and Renewal price.",
+        body: "Settings → Subscription shows your Feezo plan, Renewal date, Auto-renewal and Renewal price. This is for the school’s Feezo licence, not parent fee collection.",
         image: IMG.subscriptions,
       },
       {
@@ -1756,11 +1820,11 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Renew or upgrade",
-        body: "Tap Renew to pay online. Invoices & receipts keeps every bill for your records.",
-        tip: "On a free trial, renew before the trial ends to keep working without a break. Your data stays safe either way.",
+        body: "Tap **Renew** to pay the Feezo invoice online with **Cashfree**. Invoices & receipts keeps every bill for your records.",
+        tip: "To let parents pay student fees online, use Settings → Fee Category → Parent Pay now — not this tab.",
       },
     ],
-    related: ["branches", "team-users"],
+    related: ["branches", "team-users", "parent-pay"],
   },
 ];
 
@@ -1879,12 +1943,20 @@ export const HELP_FAQS: HelpFaq[] = [
       "Everyone uses feezo.app/login. Parents enter the phone number on the student record; staff and school admins use email/password or Google.",
     guideId: "parent-portal",
   },
+  {
+    id: "enable-online-payment",
+    question: "How do I enable online payment for student fees?",
+    answer:
+      "Open Settings → Fee Category → Parent Pay now. Turn Allow parents to pay online On and Save. Checkout uses Cashfree (managed by Feezo) — you do not enter Razorpay or other gateway keys. Parents pay in the family app; staff can share a WhatsApp Pay link or use Online at the counter. Settings → Subscription is only for renewing your Feezo plan.",
+    guideId: "parent-pay",
+  },
 ];
 
 export type QuickTask = { label: string; guideId: string };
 
 export const HELP_QUICK_TASKS: QuickTask[] = [
   { label: "Collect a fee", guideId: "receive-payment" },
+  { label: "Enable Parent Pay", guideId: "parent-pay" },
   { label: "Admit a student", guideId: "admit-student" },
   { label: "Mark attendance", guideId: "student-attendance" },
   { label: "Connect biometric", guideId: "biometric-devices" },
