@@ -612,7 +612,7 @@ export const PLAN_FEATURE_DETAILS: Record<keyof PlanFlags, PlanFeatureDetail> = 
   backup: {
     key: "backup",
     summary:
-      "Export an encrypted ZIP of your school data and optionally schedule daily or weekly uploads to Google Drive or OneDrive.",
+      "Export an encrypted ZIP of your school data and optionally schedule daily or weekly uploads to Google Drive.",
     flowTitle: "Cloud backup flow",
     mermaid: `flowchart LR
       A[Settings Backup] --> B[Set passphrase]
@@ -626,7 +626,7 @@ export const PLAN_FEATURE_DETAILS: Record<keyof PlanFlags, PlanFeatureDetail> = 
       },
       {
         title: "Manual or scheduled",
-        body: "Create a backup now for download, or choose daily/weekly and connect Google Drive or OneDrive.",
+        body: "Create a backup now for download, or choose daily/weekly and connect Google Drive.",
       },
       {
         title: "Keep the passphrase",

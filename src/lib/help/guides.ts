@@ -1568,7 +1568,7 @@ export const HELP_GUIDES: HelpGuide[] = [
     category: "settings",
     title: "Back up school data to Drive",
     summary:
-      "Export an encrypted ZIP of your school, download it, or schedule daily/weekly uploads to Google Drive or OneDrive.",
+      "Export an encrypted ZIP of your school, download it, or schedule daily/weekly uploads to Google Drive.",
     minutes: 5,
     access: { kind: "settings", tab: "backup" },
     procedure: "setup",
@@ -1576,7 +1576,6 @@ export const HELP_GUIDES: HelpGuide[] = [
       "backup",
       "cloud backup",
       "google drive",
-      "onedrive",
       "export",
       "download zip",
       "encrypted",
@@ -1590,8 +1589,8 @@ export const HELP_GUIDES: HelpGuide[] = [
       title: "Backup flow",
       mermaid: `flowchart TD
   openNode[Open_Settings_Backup] --> pass[Set_Passphrase]
-  pass --> dest{Connect_Drive}
-  dest -->|Optional| drive[Google_or_OneDrive]
+  pass --> dest{Connect_Google_Drive}
+  dest -->|Optional| drive[Google_Drive]
   dest --> manual[Create_Backup_Now]
   drive --> schedule[Daily_or_Weekly_IST]
   manual --> zip[Encrypted_ZIP]
@@ -1611,18 +1610,18 @@ export const HELP_GUIDES: HelpGuide[] = [
         warning: "If you lose the passphrase, Feezo cannot recover old ZIP passwords.",
       },
       {
-        title: "Connect Drive (optional but needed for schedules)",
-        body: "Under **Destinations**, tap **Connect** for **Google Drive** and/or **OneDrive**. Sign in with the school account that should own the files. Feezo creates a **Feezo Backups** folder.",
+        title: "Connect Google Drive (optional but needed for schedules)",
+        body: "Under **Destinations**, tap **Connect** for **Google Drive**. Sign in with the school Google account that should own the files. Feezo creates a **Feezo Backups** folder.",
       },
       {
         title: "Create a manual backup",
         body: "Tap **Create backup now**. Wait until the job shows **success**, then tap **Download**. Keep the ZIP and passphrase together in a safe place.",
-        tip: "Manual backups also upload to connected Drive accounts when those destinations are linked.",
+        tip: "Manual backups also upload to Google Drive when it is connected.",
       },
       {
         title: "Turn on a schedule",
-        body: "Under **Schedule**, choose **Daily** or **Weekly**, set the time in **IST**, and tap **Save schedule**. Cron on the server runs the job and uploads to connected destinations.",
-        tip: "Schedule stays off until a passphrase is set and at least one Drive is connected.",
+        body: "Under **Schedule**, choose **Daily** or **Weekly**, set the time in **IST**, and tap **Save schedule**. Cron on the server runs the job and uploads to Google Drive.",
+        tip: "Schedule stays off until a passphrase is set and Google Drive is connected.",
       },
       {
         title: "What is inside the ZIP",
@@ -2024,7 +2023,7 @@ export const HELP_FAQS: HelpFaq[] = [
     id: "how-backup",
     question: "How do I back up my school data?",
     answer:
-      "Open Settings → Backup. Set a passphrase under Security, optionally Connect Google Drive or OneDrive, then Create backup now and Download — or set Daily/Weekly schedule (IST) so Feezo uploads to Drive. Keep the passphrase offline; ZIPs are encrypted and in-app restore is not available yet.",
+      "Open Settings → Backup. Set a passphrase under Security, optionally Connect Google Drive, then Create backup now and Download — or set Daily/Weekly schedule (IST) so Feezo uploads to Drive. Keep the passphrase offline; ZIPs are encrypted and in-app restore is not available yet.",
     guideId: "cloud-backup",
   },
   {

@@ -89,7 +89,7 @@ export const HELP_GLOSSARY: GlossaryTerm[] = [
   {
     term: "Cloud Backup",
     meaning:
-      "An encrypted ZIP copy of your school’s Feezo data (tables + uploads) that you can download or upload to Google Drive / OneDrive on a schedule.",
+      "An encrypted ZIP copy of your school’s Feezo data (tables + uploads) that you can download or upload to Google Drive on a schedule.",
     example: "Settings → Backup → Create backup now, then Download with your passphrase.",
   },
   {

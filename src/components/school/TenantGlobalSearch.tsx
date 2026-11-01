@@ -285,7 +285,7 @@ function buildNavCatalog(session: ReturnType<typeof useAuth>["session"]): NavSea
       id: "settings-backup",
       label: "Backup",
       hint: "Settings",
-      keywords: "backup cloud drive google onedrive export zip encrypt passphrase schedule",
+      keywords: "backup cloud drive google export zip encrypt passphrase schedule",
       to: "/tenant/settings",
       search: { tab: "backup" },
       icon: HardDrive,

@@ -68,7 +68,7 @@ function errMessage(err: unknown): string {
 }
 
 function destinationLabel(provider: BackupProvider): string {
-  return provider === "google_drive" ? "Google Drive" : "OneDrive";
+  return provider === "google_drive" ? "Google Drive" : provider;
 }
 
 function formatStamp(raw: string | null | undefined, suffix = ""): string {
@@ -450,10 +450,10 @@ export function SettingsBackupPanel() {
         <OrganicCard tone="white" cornerSide="tr" padded className={cn(panelClass, "flex h-full flex-col")}>
           <SectionTitle title="Destinations" tip={BACKUP_DESTINATIONS_TIP} icon={Cloud} />
           <p className="mt-2 text-[12.5px] leading-relaxed text-black/55 dark:text-zinc-400">
-            Connect Google Drive and/or OneDrive. Files go to a “Feezo Backups” folder.
+            Connect Google Drive. Scheduled backups upload into a “Feezo Backups” folder.
           </p>
           <div className="mt-4 flex flex-1 flex-col gap-2.5">
-            {(["google_drive", "onedrive"] as BackupProvider[]).map((provider) => {
+            {(["google_drive"] as BackupProvider[]).map((provider) => {
               const dest = settings?.destinations.find((d) => d.provider === provider);
               const configured = settings?.providersConfigured?.[provider];
               const connected = dest?.status === "connected";

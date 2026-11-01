@@ -1,6 +1,6 @@
 import { apiBaseUrl, apiRequest, getApiToken } from "@/lib/api/client";
 
-export type BackupProvider = "google_drive" | "onedrive";
+export type BackupProvider = "google_drive";
 
 export type BackupDestination = {
   provider: BackupProvider;
@@ -23,7 +23,6 @@ export type BackupSettings = {
   destinations: BackupDestination[];
   providersConfigured: {
     google_drive: boolean;
-    onedrive: boolean;
   };
   timezone: string;
   restoreSupported: boolean;

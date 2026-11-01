@@ -470,7 +470,7 @@ export const BACKUP_TIP: InfoTipContent = {
   points: [
     "Open Settings → Backup (needs Cloud Backup on your plan and Backup permission).",
     "Under Security, set a passphrase (8+ characters). Copy it when Feezo shows it once — you need it to open every ZIP.",
-    "Optional: Connect Google Drive and/or OneDrive. Feezo creates a Feezo Backups folder.",
+    "Optional: Connect Google Drive. Feezo creates a Feezo Backups folder.",
     "Manual: tap Create backup now, wait until Success, then Download. Or set Schedule to Daily/Weekly (IST) so cron uploads to Drive.",
     "The ZIP holds manifest.json, data tables, and uploads. It is for your records — in-app restore is not available yet.",
   ],
@@ -489,7 +489,7 @@ export const BACKUP_SCHEDULE_TIP: InfoTipContent = {
 export const BACKUP_DESTINATIONS_TIP: InfoTipContent = {
   title: "Drive destinations",
   points: [
-    "Connect Google Drive or OneDrive with the school Google/Microsoft account you want to own the files.",
+    "Connect Google Drive with the school Google account that should own the files.",
     "Feezo uploads into a Feezo Backups folder.",
     "If status shows Reconnect required, tap Reconnect and grant offline access again.",
   ],
