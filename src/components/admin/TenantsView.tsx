@@ -27,6 +27,7 @@ import {
   ChevronUp,
   Check,
   Landmark,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { type Tenant, type Tier, type Status } from "./data";
@@ -331,9 +332,24 @@ export function TenantsView({
   const [query, setQuery] = useState("");
   const [tier, setTier] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
-  const [activityMetric, setActivityMetric] = useState<ActivityMetric | "all">("last-seen");
+  const [activityMetric, setActivityMetric] = useState<ActivityMetric | "all">("all");
   const [activityWindow, setActivityWindow] = useState<ActivityWindow | "all">("all");
   const [open, setOpen] = useState(false);
+
+  const filtersActive =
+    query.trim() !== "" ||
+    tier !== "all" ||
+    status !== "all" ||
+    activityMetric !== "all" ||
+    activityWindow !== "all";
+
+  const resetFilters = () => {
+    setQuery("");
+    setTier("all");
+    setStatus("all");
+    setActivityMetric("all");
+    setActivityWindow("all");
+  };
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [billingMap, setBillingMap] = useState<Record<string, BillingRule>>({});
@@ -746,6 +762,22 @@ export function TenantsView({
             <SelectItem value="Suspended">Suspended</SelectItem>
           </SelectContent>
         </Select>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!filtersActive}
+          onClick={resetFilters}
+          className={cn(
+            "h-11 w-full rounded-lg border-[#E5E5E5] px-3 text-[12px] font-semibold sm:h-10 sm:w-auto",
+            filtersActive
+              ? "bg-white text-black hover:border-black/25 hover:bg-[#FAFAFA]"
+              : "bg-[#F4F4F5] text-black/35",
+          )}
+          aria-label="Reset filters"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Reset
+        </Button>
 
         <div className="flex w-full flex-wrap items-center gap-1.5 sm:basis-full">
           <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-wider text-black/40">

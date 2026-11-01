@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { HardDrive, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Cloud,
+  Download,
+  HardDrive,
+  KeyRound,
+  Loader2,
+  RefreshCw,
+  Shield,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { TimePicker24 } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OrganicCard } from "@/components/ui/organic-card";
@@ -37,7 +49,7 @@ import {
 } from "@/lib/api/backup";
 import { cn } from "@/lib/utils";
 
-const panelClass = "min-w-0 rounded-2xl";
+const panelClass = "min-w-0 overflow-hidden rounded-[22px]";
 
 const WEEKDAYS = [
   { value: "1", label: "Monday" },
@@ -57,6 +69,40 @@ function errMessage(err: unknown): string {
 
 function destinationLabel(provider: BackupProvider): string {
   return provider === "google_drive" ? "Google Drive" : "OneDrive";
+}
+
+function formatStamp(raw: string | null | undefined, suffix = ""): string {
+  if (!raw) return "—";
+  return `${raw.replace("T", " ").slice(0, 19)}${suffix}`;
+}
+
+function jobStatusClass(status: BackupJob["status"]): string {
+  if (status === "success") return "bg-[#CCFBF1] text-[#0F766E]";
+  if (status === "failed") return "bg-[#FEE2E2] text-[#DC2626]";
+  if (status === "running" || status === "queued") return "bg-[#E0F2FE] text-[#0369A1]";
+  return "bg-[#F4F4F5] text-black/50";
+}
+
+function SectionTitle({
+  title,
+  tip,
+  icon: Icon,
+}: {
+  title: string;
+  tip?: Parameters<typeof InfoTip>[0]["content"];
+  icon?: typeof HardDrive;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      {Icon ? (
+        <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#F0FDFA] text-[#0F766E] dark:bg-[#0F766E]/20 dark:text-[#5EEAD4]">
+          <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
+        </span>
+      ) : null}
+      <h3 className="text-[15px] font-semibold tracking-tight text-black dark:text-zinc-50">{title}</h3>
+      {tip ? <InfoTip content={tip} side="bottom" /> : null}
+    </div>
+  );
 }
 
 export function SettingsBackupPanel() {
@@ -207,263 +253,328 @@ export function SettingsBackupPanel() {
   };
 
   const latestSuccess = jobs.find((j) => j.status === "success" && j.downloadAvailable);
+  const hasPassphrase = Boolean(settings?.passphraseSet);
+  const nextScheduled =
+    settings?.frequency === "off"
+      ? "Off"
+      : settings?.nextRunAt
+        ? formatStamp(settings.nextRunAt, " UTC")
+        : "—";
 
   if (loading && !settings) {
     return (
       <OrganicCard tone="white" cornerSide="tr" padded className={panelClass}>
-        <div className="py-10 text-center text-[13px] text-black/50">Loading backup…</div>
+        <div className="flex items-center justify-center gap-2 py-14 text-[13px] text-black/45 dark:text-zinc-500">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading backup…
+        </div>
       </OrganicCard>
     );
   }
 
   return (
-    <div className="grid grid-cols-12 items-start gap-3 sm:gap-4 lg:gap-5">
-      <OrganicCard tone="white" cornerSide="tr" padded className={cn(panelClass, "col-span-12")}>
-        <SettingsResponsiveCardHeader
-          title="Backup"
-          subtitle="Encrypted school snapshot for your records. In-app restore is not available yet."
-          info={BACKUP_TIP}
-          action={
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] font-semibold text-black/70 hover:bg-[#F4F4F5]"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Refresh
-            </button>
-          }
-        />
+    <div className="flex flex-col gap-4 sm:gap-5">
+      {/* Overview */}
+      <OrganicCard tone="white" cornerSide="tr" padded={false} className={panelClass}>
+        <div className="relative overflow-hidden border-b border-[#F0F0F0] px-4 py-5 sm:px-6 sm:py-6 dark:border-white/10">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(15,118,110,0.10),transparent_55%),linear-gradient(180deg,#F8FFFD_0%,#FFFFFF_70%)] dark:bg-[radial-gradient(ellipse_at_top_right,rgba(15,118,110,0.18),transparent_55%),linear-gradient(180deg,#0F1F1D_0%,#18181B_70%)]"
+          />
+          <div className="relative">
+            <SettingsResponsiveCardHeader
+              title="Backup"
+              subtitle="Encrypted school snapshot for your records. In-app restore is not available yet."
+              info={BACKUP_TIP}
+              action={
+                <button
+                  type="button"
+                  onClick={() => void load()}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#E5E5E5] bg-white/90 px-3 text-[12px] font-semibold text-black/70 backdrop-blur hover:bg-white dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh
+                </button>
+              }
+            />
 
-        <div className="mt-5 grid gap-6 lg:grid-cols-2">
-          <section className="space-y-3">
-            <h3 className="text-[13px] font-semibold text-black">Status</h3>
-            <dl className="space-y-2 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3 text-[12.5px]">
-              <div className="flex justify-between gap-3">
-                <dt className="text-black/50">Last success</dt>
-                <dd className="font-medium text-black">
-                  {settings?.lastSuccessAt ? settings.lastSuccessAt.replace("T", " ").slice(0, 19) : "Never"}
-                </dd>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-[#E7F0EE] bg-white/80 px-3.5 py-3 backdrop-blur dark:border-white/10 dark:bg-zinc-900/60">
+                <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-black/40 dark:text-zinc-500">
+                  <CheckCircle2 className="h-3 w-3 text-[#0F766E]" />
+                  Last success
+                </div>
+                <div className="mt-1.5 text-[13.5px] font-semibold tracking-tight text-black dark:text-zinc-50">
+                  {settings?.lastSuccessAt ? formatStamp(settings.lastSuccessAt) : "Never"}
+                </div>
               </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-black/50">Next scheduled</dt>
-                <dd className="font-medium text-black">
-                  {settings?.frequency === "off"
-                    ? "Off"
-                    : settings?.nextRunAt
-                      ? settings.nextRunAt.replace("T", " ").slice(0, 19) + " UTC"
-                      : "—"}
-                </dd>
+              <div className="rounded-2xl border border-[#E7F0EE] bg-white/80 px-3.5 py-3 backdrop-blur dark:border-white/10 dark:bg-zinc-900/60">
+                <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-black/40 dark:text-zinc-500">
+                  <Clock3 className="h-3 w-3 text-[#0F766E]" />
+                  Next scheduled
+                </div>
+                <div className="mt-1.5 text-[13.5px] font-semibold tracking-tight text-black dark:text-zinc-50">
+                  {nextScheduled}
+                </div>
               </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-black/50">Last error</dt>
-                <dd className="max-w-[60%] text-right font-medium text-red-700">
+              <div className="rounded-2xl border border-[#E7F0EE] bg-white/80 px-3.5 py-3 backdrop-blur dark:border-white/10 dark:bg-zinc-900/60">
+                <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-black/40 dark:text-zinc-500">
+                  <AlertTriangle className="h-3 w-3 text-black/35" />
+                  Last error
+                </div>
+                <div
+                  className={cn(
+                    "mt-1.5 truncate text-[13.5px] font-semibold tracking-tight",
+                    settings?.lastError ? "text-red-700 dark:text-red-400" : "text-black dark:text-zinc-50",
+                  )}
+                  title={settings?.lastError || undefined}
+                >
                   {settings?.lastError || "—"}
-                </dd>
+                </div>
               </div>
-            </dl>
-          </section>
+            </div>
 
-          <section className="space-y-3">
-            <h3 className="text-[13px] font-semibold text-black">Manual backup</h3>
-            <p className="text-[12px] leading-relaxed text-black/55">
-              Creates an AES-encrypted ZIP of your school data and uploads. Keep the passphrase safe —
-              you need it to open the file.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                disabled={creating || Boolean(busyJob) || !settings?.passphraseSet}
-                onClick={() => void createJob()}
-                className="rounded-full bg-[#0F766E] hover:bg-[#0D9488]"
-              >
-                <HardDrive className="mr-1.5 h-3.5 w-3.5" />
-                {busyJob ? "Backup running…" : "Create backup now"}
-              </Button>
-              {latestSuccess ? (
+            <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#E5E5E5] bg-white/90 p-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between dark:border-white/10 dark:bg-zinc-900/70">
+              <div className="min-w-0">
+                <div className="text-[13.5px] font-semibold tracking-tight text-black dark:text-zinc-50">
+                  Manual backup
+                </div>
+                <p className="mt-1 text-[12.5px] leading-relaxed text-black/55 dark:text-zinc-400">
+                  Creates an AES-encrypted ZIP of your school data. Keep the passphrase safe — you need it
+                  to open the file.
+                </p>
+                {!hasPassphrase ? (
+                  <p className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium text-amber-800 dark:text-amber-300">
+                    <KeyRound className="h-3.5 w-3.5" />
+                    Set a passphrase below before creating a backup.
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
                 <Button
                   type="button"
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={() =>
-                    void downloadBackupZip(latestSuccess).catch((err) => toast.error(errMessage(err)))
-                  }
+                  disabled={creating || Boolean(busyJob) || !hasPassphrase}
+                  onClick={() => void createJob()}
+                  className="h-11 w-full rounded-xl bg-[#0F766E] text-[13px] font-semibold hover:bg-[#0D9488] sm:w-auto sm:px-5"
                 >
-                  Download latest ({formatBackupBytes(latestSuccess.byteSize)})
+                  {creating || busyJob ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <HardDrive className="mr-1.5 h-4 w-4" />
+                  )}
+                  {busyJob ? "Backup running…" : "Create backup now"}
                 </Button>
-              ) : null}
+                {latestSuccess ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 w-full rounded-xl border-[#E5E5E5] text-[13px] font-semibold dark:border-white/10 sm:w-auto"
+                    onClick={() =>
+                      void downloadBackupZip(latestSuccess).catch((err) => toast.error(errMessage(err)))
+                    }
+                  >
+                    <Download className="mr-1.5 h-4 w-4" />
+                    Download ({formatBackupBytes(latestSuccess.byteSize)})
+                  </Button>
+                ) : null}
+              </div>
             </div>
-            {!settings?.passphraseSet ? (
-              <p className="text-[12px] text-amber-800">Set a passphrase below before creating a backup.</p>
-            ) : null}
-          </section>
+          </div>
         </div>
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="tr" padded className={cn(panelClass, "col-span-12 lg:col-span-6")}>
-        <div className="flex items-center gap-1">
-          <h3 className="text-[13px] font-semibold text-black">Schedule</h3>
-          <InfoTip content={BACKUP_SCHEDULE_TIP} side="bottom" />
-        </div>
-        <p className="mt-1 text-[12px] text-black/55">
-          Times are India Standard Time ({settings?.timezone || "Asia/Kolkata"}). Scheduled runs upload to
-          connected Drive destinations.
-        </p>
-        <div className="mt-4 space-y-3">
-          <div>
-            <Label className="text-[12px]">Frequency</Label>
-            <Select value={frequency} onValueChange={(v) => setFrequency(v as BackupSettings["frequency"])}>
-              <SelectTrigger className="mt-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="off">Off</SelectItem>
-                <SelectItem value="daily">Daily</SelectItem>
-                <SelectItem value="weekly">Weekly</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {frequency === "weekly" ? (
+      {/* Schedule + Destinations */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2 lg:items-stretch">
+        <OrganicCard tone="white" cornerSide="tr" padded className={cn(panelClass, "flex h-full flex-col")}>
+          <SectionTitle title="Schedule" tip={BACKUP_SCHEDULE_TIP} icon={Clock3} />
+          <p className="mt-2 text-[12.5px] leading-relaxed text-black/55 dark:text-zinc-400">
+            Times are India Standard Time ({settings?.timezone || "Asia/Kolkata"}).
+          </p>
+          <div className="mt-4 flex flex-1 flex-col gap-3">
             <div>
-              <Label className="text-[12px]">Day</Label>
-              <Select value={weeklyDow} onValueChange={setWeeklyDow}>
-                <SelectTrigger className="mt-1">
+              <Label className="text-[12px] text-black/60">Frequency</Label>
+              <Select value={frequency} onValueChange={(v) => setFrequency(v as BackupSettings["frequency"])}>
+                <SelectTrigger className="mt-1.5 h-11 rounded-xl border-[#E5E5E5] bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {WEEKDAYS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>
-                      {d.label}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="off">Off</SelectItem>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-          ) : null}
-          {frequency !== "off" ? (
-            <div>
-              <Label className="text-[12px]">Time (IST)</Label>
-              <Input
-                type="time"
-                className="mt-1"
-                value={runTime}
-                onChange={(e) => setRunTime(e.target.value)}
-              />
-            </div>
-          ) : null}
-          <Button
-            type="button"
-            disabled={saving}
-            onClick={() => void saveSchedule()}
-            className="rounded-full bg-[#0F766E] hover:bg-[#0D9488]"
-          >
-            Save schedule
-          </Button>
-        </div>
-      </OrganicCard>
-
-      <OrganicCard tone="white" cornerSide="tr" padded className={cn(panelClass, "col-span-12 lg:col-span-6")}>
-        <div className="flex items-center gap-1">
-          <h3 className="text-[13px] font-semibold text-black">Destinations</h3>
-          <InfoTip content={BACKUP_DESTINATIONS_TIP} side="bottom" />
-        </div>
-        <p className="mt-1 text-[12px] text-black/55">
-          Connect Google Drive and/or OneDrive. Files go to a “Feezo Backups” folder.
-        </p>
-        <div className="mt-4 space-y-3">
-          {(["google_drive", "onedrive"] as BackupProvider[]).map((provider) => {
-            const dest = settings?.destinations.find((d) => d.provider === provider);
-            const configured = settings?.providersConfigured?.[provider];
-            return (
-              <div
-                key={provider}
-                className="flex items-center justify-between gap-3 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3"
-              >
-                <div className="min-w-0">
-                  <div className="text-[13px] font-semibold text-black">{destinationLabel(provider)}</div>
-                  <div className="truncate text-[11.5px] text-black/50">
-                    {!configured
-                      ? "Not configured on server"
-                      : dest?.status === "connected"
-                        ? dest.accountEmail || "Connected"
-                        : dest?.status === "expired"
-                          ? "Reconnect required"
-                          : "Not connected"}
-                  </div>
+            {frequency === "weekly" ? (
+              <div>
+                <Label className="text-[12px] text-black/60">Day</Label>
+                <Select value={weeklyDow} onValueChange={setWeeklyDow}>
+                  <SelectTrigger className="mt-1.5 h-11 rounded-xl border-[#E5E5E5] bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WEEKDAYS.map((d) => (
+                      <SelectItem key={d.value} value={d.value}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            {frequency !== "off" ? (
+              <div>
+                <Label className="text-[12px] text-black/60">Time (IST)</Label>
+                <div className="mt-1.5 flex h-11 items-stretch overflow-hidden rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900">
+                  <TimePicker24
+                    value={runTime}
+                    onChange={(clock) => setRunTime(clock || "02:00")}
+                    className="h-full w-full justify-start px-3.5 hover:bg-transparent dark:hover:bg-transparent"
+                    align="start"
+                  />
                 </div>
-                {dest?.status === "connected" || dest?.status === "expired" ? (
-                  <div className="flex shrink-0 gap-1.5">
-                    {dest.status === "expired" ? (
+              </div>
+            ) : null}
+            <div className="mt-auto pt-2">
+              <Button
+                type="button"
+                disabled={saving}
+                onClick={() => void saveSchedule()}
+                className="h-11 w-full rounded-xl bg-[#0F766E] text-[13px] font-semibold hover:bg-[#0D9488] sm:w-auto sm:px-5"
+              >
+                {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                Save schedule
+              </Button>
+            </div>
+          </div>
+        </OrganicCard>
+
+        <OrganicCard tone="white" cornerSide="tr" padded className={cn(panelClass, "flex h-full flex-col")}>
+          <SectionTitle title="Destinations" tip={BACKUP_DESTINATIONS_TIP} icon={Cloud} />
+          <p className="mt-2 text-[12.5px] leading-relaxed text-black/55 dark:text-zinc-400">
+            Connect Google Drive and/or OneDrive. Files go to a “Feezo Backups” folder.
+          </p>
+          <div className="mt-4 flex flex-1 flex-col gap-2.5">
+            {(["google_drive", "onedrive"] as BackupProvider[]).map((provider) => {
+              const dest = settings?.destinations.find((d) => d.provider === provider);
+              const configured = settings?.providersConfigured?.[provider];
+              const connected = dest?.status === "connected";
+              const expired = dest?.status === "expired";
+              return (
+                <div
+                  key={provider}
+                  className="flex flex-col gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 sm:flex-row sm:items-center sm:justify-between dark:border-white/10 dark:bg-white/[0.03]"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-[13.5px] font-semibold tracking-tight text-black dark:text-zinc-50">
+                        {destinationLabel(provider)}
+                      </div>
+                      <span
+                        className={cn(
+                          "rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                          !configured
+                            ? "bg-[#F4F4F5] text-black/40 dark:bg-zinc-800 dark:text-zinc-500"
+                            : connected
+                              ? "bg-[#CCFBF1] text-[#0F766E]"
+                              : expired
+                                ? "bg-[#FFEDD5] text-[#C2410C]"
+                                : "bg-[#F4F4F5] text-black/45 dark:bg-zinc-800 dark:text-zinc-400",
+                        )}
+                      >
+                        {!configured
+                          ? "Not on server"
+                          : connected
+                            ? "Connected"
+                            : expired
+                              ? "Reconnect"
+                              : "Not connected"}
+                      </span>
+                    </div>
+                    <div className="mt-1 truncate text-[12px] text-black/50 dark:text-zinc-400">
+                      {!configured
+                        ? "OAuth keys are missing on this server"
+                        : connected
+                          ? dest?.accountEmail || "Ready to receive uploads"
+                          : expired
+                            ? "Session expired — reconnect to keep uploads working"
+                            : "Connect to upload scheduled backups"}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-1.5">
+                    {connected || expired ? (
+                      <>
+                        {expired ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-9 rounded-xl bg-[#0F766E] px-3 text-[12px] font-semibold hover:bg-[#0D9488]"
+                            disabled={!configured}
+                            onClick={() => void connect(provider)}
+                          >
+                            Reconnect
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-9 rounded-xl border-[#E5E5E5] px-3 text-[12px] font-semibold dark:border-white/10"
+                          onClick={() => void disconnect(provider)}
+                        >
+                          Disconnect
+                        </Button>
+                      </>
+                    ) : (
                       <Button
                         type="button"
                         size="sm"
-                        className="rounded-full"
+                        className="h-9 rounded-xl bg-[#0F766E] px-3 text-[12px] font-semibold hover:bg-[#0D9488]"
                         disabled={!configured}
                         onClick={() => void connect(provider)}
                       >
-                        Reconnect
+                        Connect
                       </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="rounded-full"
-                      onClick={() => void disconnect(provider)}
-                    >
-                      Disconnect
-                    </Button>
+                    )}
                   </div>
-                ) : (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="rounded-full bg-[#0F766E] hover:bg-[#0D9488]"
-                    disabled={!configured}
-                    onClick={() => void connect(provider)}
-                  >
-                    Connect
-                  </Button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </OrganicCard>
+                </div>
+              );
+            })}
+          </div>
+        </OrganicCard>
+      </div>
 
-      <OrganicCard tone="white" cornerSide="tr" padded className={cn(panelClass, "col-span-12")}>
-        <div className="flex items-center gap-1">
-          <h3 className="text-[13px] font-semibold text-black">Security</h3>
-          <InfoTip content={BACKUP_SECURITY_TIP} side="bottom" />
-        </div>
-        <p className="mt-1 text-[12px] text-black/55">
+      {/* Security */}
+      <OrganicCard tone="white" cornerSide="tr" padded className={panelClass}>
+        <SectionTitle title="Security" tip={BACKUP_SECURITY_TIP} icon={Shield} />
+        <p className="mt-2 text-[12.5px] leading-relaxed text-black/55 dark:text-zinc-400">
           ZIP password for every backup. Shown once when you set or rotate it — store it offline.
         </p>
         {shownOnce ? (
-          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12.5px] text-amber-950">
-            <div className="font-semibold">Copy this passphrase now</div>
-            <code className="mt-1 block break-all font-mono text-[13px]">{shownOnce}</code>
+          <div className="mt-4 rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3.5 text-[12.5px] text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-100">
+            <div className="font-semibold tracking-tight">Copy this passphrase now</div>
+            <code className="mt-2 block break-all rounded-xl bg-white/70 px-3 py-2 font-mono text-[13px] dark:bg-black/30">
+              {shownOnce}
+            </code>
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className="mt-2 rounded-full"
+              className="mt-3 h-9 rounded-xl border-amber-300/70 bg-white text-[12px] font-semibold dark:border-amber-500/40 dark:bg-transparent"
               onClick={() => {
                 void navigator.clipboard.writeText(shownOnce);
                 toast.success("Copied");
               }}
             >
-              Copy
+              Copy passphrase
             </Button>
           </div>
         ) : null}
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {settings?.passphraseSet ? (
+          {hasPassphrase ? (
             <div>
-              <Label className="text-[12px]">Current passphrase</Label>
+              <Label className="text-[12px] text-black/60">Current passphrase</Label>
               <Input
                 type="password"
-                className="mt-1"
+                className="mt-1.5 h-11 rounded-xl border-[#E5E5E5] bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900"
                 value={currentPassphrase}
                 onChange={(e) => setCurrentPassphrase(e.target.value)}
                 autoComplete="off"
@@ -471,21 +582,21 @@ export function SettingsBackupPanel() {
             </div>
           ) : null}
           <div>
-            <Label className="text-[12px]">
-              {settings?.passphraseSet ? "New passphrase" : "Passphrase"}
+            <Label className="text-[12px] text-black/60">
+              {hasPassphrase ? "New passphrase" : "Passphrase"}
             </Label>
             <Input
               type="password"
-              className="mt-1"
+              className="mt-1.5 h-11 rounded-xl border-[#E5E5E5] bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900"
               value={passphrase}
               onChange={(e) => setPassphrase(e.target.value)}
               autoComplete="new-password"
             />
           </div>
-          <div>
-            <Label className="text-[12px]">Optional hint</Label>
+          <div className={cn(!hasPassphrase && "sm:col-span-1", hasPassphrase && "sm:col-span-2 lg:col-span-1")}>
+            <Label className="text-[12px] text-black/60">Optional hint</Label>
             <Input
-              className="mt-1"
+              className="mt-1.5 h-11 rounded-xl border-[#E5E5E5] bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900"
               value={passphraseHint}
               onChange={(e) => setPassphraseHint(e.target.value)}
               placeholder={settings?.passphraseHint || "e.g. school safe drawer"}
@@ -496,57 +607,131 @@ export function SettingsBackupPanel() {
           type="button"
           disabled={saving || passphrase.trim().length < 8}
           onClick={() => void savePassphrase()}
-          className="mt-4 rounded-full bg-[#0F766E] hover:bg-[#0D9488]"
+          className="mt-4 h-11 w-full rounded-xl bg-[#0F766E] text-[13px] font-semibold hover:bg-[#0D9488] sm:w-auto sm:px-5"
         >
-          {settings?.passphraseSet ? "Rotate passphrase" : "Set passphrase"}
+          {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <KeyRound className="mr-1.5 h-4 w-4" />}
+          {hasPassphrase ? "Rotate passphrase" : "Set passphrase"}
         </Button>
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="tr" padded className={cn(panelClass, "col-span-12")}>
-        <h3 className="text-[13px] font-semibold text-black">Recent jobs</h3>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[520px] text-left text-[12px]">
-            <thead className="text-black/45">
-              <tr className="border-b border-[#EFEFEF]">
-                <th className="py-2 pr-3 font-medium">Job</th>
-                <th className="py-2 pr-3 font-medium">Status</th>
-                <th className="py-2 pr-3 font-medium">Size</th>
-                <th className="py-2 pr-3 font-medium">When</th>
-                <th className="py-2 font-medium" />
+      {/* Recent jobs */}
+      <OrganicCard tone="white" cornerSide="tr" padded className={panelClass}>
+        <SectionTitle title="Recent jobs" icon={HardDrive} />
+        <p className="mt-2 text-[12.5px] text-black/55 dark:text-zinc-400">
+          Manual and scheduled backup history for this school.
+        </p>
+
+        {/* Mobile cards */}
+        <ul className="mt-4 space-y-2.5 md:hidden">
+          {jobs.length === 0 ? (
+            <li className="rounded-2xl border border-dashed border-[#E5E5E5] px-4 py-8 text-center text-[13px] text-black/45 dark:border-white/10 dark:text-zinc-500">
+              No backups yet
+            </li>
+          ) : (
+            jobs.map((job) => (
+              <li
+                key={job.id}
+                className="rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-white/[0.03]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-mono text-[11px] text-black/50 dark:text-zinc-500">
+                      {job.id}
+                    </div>
+                    <div className="mt-1 text-[12.5px] text-black/60 dark:text-zinc-400">
+                      {formatStamp(job.finishedAt || job.createdAt)} · {formatBackupBytes(job.byteSize)}
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-md px-2 py-0.5 text-[10.5px] font-semibold capitalize",
+                      jobStatusClass(job.status),
+                    )}
+                  >
+                    {job.status}
+                  </span>
+                </div>
+                {job.error ? (
+                  <p className="mt-2 text-[11.5px] leading-snug text-red-600 dark:text-red-400">{job.error}</p>
+                ) : null}
+                {job.downloadAvailable ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 h-9 w-full rounded-xl border-[#E5E5E5] text-[12px] font-semibold dark:border-white/10"
+                    onClick={() =>
+                      void downloadBackupZip(job).catch((err) => toast.error(errMessage(err)))
+                    }
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    Download
+                  </Button>
+                ) : null}
+              </li>
+            ))
+          )}
+        </ul>
+
+        {/* Desktop table */}
+        <div className="mt-4 hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[560px] text-left text-[12.5px]">
+            <thead className="text-[11px] font-semibold uppercase tracking-[0.06em] text-black/40 dark:text-zinc-500">
+              <tr className="border-b border-[#F0F0F0] dark:border-white/10">
+                <th className="pb-2.5 pr-3 font-semibold">Job</th>
+                <th className="pb-2.5 pr-3 font-semibold">Status</th>
+                <th className="pb-2.5 pr-3 font-semibold">Size</th>
+                <th className="pb-2.5 pr-3 font-semibold">When</th>
+                <th className="pb-2.5 font-semibold" />
               </tr>
             </thead>
             <tbody>
               {jobs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-black/45">
+                  <td colSpan={5} className="py-10 text-center text-black/45 dark:text-zinc-500">
                     No backups yet
                   </td>
                 </tr>
               ) : (
                 jobs.map((job) => (
-                  <tr key={job.id} className="border-b border-[#F3F3F3]">
-                    <td className="py-2.5 pr-3 font-mono text-[11px]">{job.id}</td>
-                    <td className="py-2.5 pr-3 capitalize">
-                      {job.status}
+                  <tr
+                    key={job.id}
+                    className="border-b border-[#F3F3F3] last:border-b-0 dark:border-white/10"
+                  >
+                    <td className="py-3 pr-3 font-mono text-[11.5px] text-black/70 dark:text-zinc-300">
+                      {job.id}
+                    </td>
+                    <td className="py-3 pr-3">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold capitalize",
+                          jobStatusClass(job.status),
+                        )}
+                      >
+                        {job.status}
+                      </span>
                       {job.error ? (
-                        <span className="mt-0.5 block max-w-[220px] truncate text-[10.5px] text-red-600">
+                        <span className="mt-1 block max-w-[240px] truncate text-[11px] text-red-600 dark:text-red-400">
                           {job.error}
                         </span>
                       ) : null}
                     </td>
-                    <td className="py-2.5 pr-3">{formatBackupBytes(job.byteSize)}</td>
-                    <td className="py-2.5 pr-3 text-black/60">
-                      {(job.finishedAt || job.createdAt).replace("T", " ").slice(0, 19)}
+                    <td className="py-3 pr-3 tabular-nums text-black/70 dark:text-zinc-300">
+                      {formatBackupBytes(job.byteSize)}
                     </td>
-                    <td className="py-2.5 text-right">
+                    <td className="py-3 pr-3 text-black/55 dark:text-zinc-400">
+                      {formatStamp(job.finishedAt || job.createdAt)}
+                    </td>
+                    <td className="py-3 text-right">
                       {job.downloadAvailable ? (
                         <button
                           type="button"
-                          className="text-[12px] font-semibold text-[#0F766E] hover:underline"
+                          className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-[#0F766E] hover:underline dark:text-[#5EEAD4]"
                           onClick={() =>
                             void downloadBackupZip(job).catch((err) => toast.error(errMessage(err)))
                           }
                         >
+                          <Download className="h-3.5 w-3.5" />
                           Download
                         </button>
                       ) : null}
