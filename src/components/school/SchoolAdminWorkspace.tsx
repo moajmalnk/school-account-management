@@ -167,6 +167,7 @@ import { BankAccountsManager } from "@/components/school/BankAccountsManager";
 import { AcademicsWorkspace } from "@/components/school/AcademicsWorkspace";
 import { OrgCurrencyCard } from "@/components/school/OrgCurrencyCard";
 import { OrgLanguageCard } from "@/components/school/OrgLanguageCard";
+import { OrgTimezoneCard } from "@/components/school/OrgTimezoneCard";
 import { ReceiptPrintLayoutCard } from "@/components/school/ReceiptPrintLayoutCard";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
@@ -24161,6 +24162,7 @@ function CategoriesCard({
             <div className="grid grid-cols-12 gap-3">
               <OrgCurrencyCard />
               <OrgLanguageCard />
+              <OrgTimezoneCard />
             </div>
           </div>
         </div>

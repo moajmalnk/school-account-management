@@ -1,5 +1,6 @@
 import { ApiError, apiRequest, getApiToken } from "@/lib/api/client";
 import { type CurrencyCode, normalizeCurrency } from "@/lib/locale/currencies";
+import { normalizeTimezone, setOrgTimezone, type TimezoneCode } from "@/lib/locale/timezones";
 import { setOrgCurrency } from "@/lib/money";
 import type {
   ClassConfig,
@@ -105,6 +106,9 @@ export async function apiSaveSchoolDetails(
     },
   });
   if (data.currency) setOrgCurrency(data.currency);
+  if ((data as { timezone?: unknown }).timezone) {
+    setOrgTimezone((data as { timezone?: unknown }).timezone);
+  }
   return data.schoolDetails;
 }
 
@@ -120,6 +124,21 @@ export async function apiSaveOrgCurrency(currency: CurrencyCode): Promise<Curren
   });
   const saved = normalizeCurrency(data.currency, currency);
   setOrgCurrency(saved);
+  return saved;
+}
+
+/** Persist the organization base timezone (Backup schedule wall clock). */
+export async function apiSaveOrgTimezone(timezone: TimezoneCode): Promise<TimezoneCode> {
+  if (!hasToken()) {
+    setOrgTimezone(timezone);
+    return timezone;
+  }
+  const data = await apiRequest<{ timezone?: string }>("/api/settings/school.php", {
+    method: "PUT",
+    body: { timezone },
+  });
+  const saved = normalizeTimezone(data.timezone, timezone);
+  setOrgTimezone(saved);
   return saved;
 }
 

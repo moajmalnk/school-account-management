@@ -85,6 +85,17 @@ export const BASE_LANGUAGE_TIP: InfoTipContent = {
   note: "Pick English today — other languages unlock in place when ready.",
 };
 
+export const BASE_TIMEZONE_TIP: InfoTipContent = {
+  title: "Base timezone",
+  points: [
+    "One timezone for the whole organisation (all campuses).",
+    "Backup Daily/Weekly schedule times use this zone (for example India IST or UAE GST).",
+    "Changing it does not rewrite past receipts — only future scheduled jobs.",
+    "Only the school admin can change it. It saves immediately.",
+  ],
+  note: "Defaults to India (IST).",
+};
+
 export const BANK_DETAILS_TIP: InfoTipContent = {
   title: "Bank details",
   points: [
@@ -471,7 +482,7 @@ export const BACKUP_TIP: InfoTipContent = {
     "Open Settings → Backup (needs Cloud Backup on your plan and Backup permission).",
     "Under Security, set a passphrase (8+ characters). Copy it when Feezo shows it once — you need it to open every ZIP.",
     "Optional: Connect Google Drive. Feezo creates a Feezo Backups folder.",
-    "Manual: tap Create backup now, wait until Success, then Download. Or set Schedule to Daily/Weekly (IST) so cron uploads to Drive.",
+    "Manual: tap Create backup now, wait until Success, then Download. Or set Schedule to Daily/Weekly (organisation base timezone) so cron uploads to Drive.",
     "The ZIP holds manifest.json, data tables, and uploads. It is for your records — in-app restore is not available yet.",
   ],
   note: "If Backup is missing from Settings, ask Feezo support or your admin to enable Cloud Backup on the plan.",
@@ -481,8 +492,8 @@ export const BACKUP_SCHEDULE_TIP: InfoTipContent = {
   title: "Backup schedule",
   points: [
     "Off = only manual backups.",
-    "Daily or Weekly runs in India Standard Time (IST).",
-    "Scheduled runs need a passphrase and at least one connected Drive destination.",
+    "Daily or Weekly times use Settings → System → Base timezone.",
+    "Scheduled runs need a passphrase and a connected Google Drive.",
   ],
 };
 

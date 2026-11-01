@@ -65,7 +65,7 @@ export function OrgCurrencyCard() {
   };
 
   return (
-    <div className="col-span-12 sm:col-span-6 lg:col-span-6">
+    <div className="col-span-12 sm:col-span-6 lg:col-span-4">
       <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
         Base currency
         <InfoTip content={BASE_CURRENCY_TIP} className="-my-1" />

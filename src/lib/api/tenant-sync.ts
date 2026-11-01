@@ -5,6 +5,7 @@ import {
   isAuthExpiredError,
   isUnauthorizedNotified,
 } from "@/lib/api/client";
+import { setOrgTimezone } from "@/lib/locale/timezones";
 import { setOrgCurrency } from "@/lib/money";
 import {
   SEED_BRANCHES,
@@ -256,11 +257,14 @@ function isTimeoutApiError(err: unknown): boolean {
   return err instanceof ApiError && err.status === 0;
 }
 
-/** school.php / bundle.php carry the tenant-wide base currency. */
+/** school.php / bundle.php carry the tenant-wide base currency + timezone. */
 function captureOrgCurrency(path: string, data: unknown) {
   if (!/\/api\/(settings\/school|tenant\/bundle)\.php/.test(path)) return;
   if (data && typeof data === "object" && "currency" in data) {
     setOrgCurrency((data as { currency?: unknown }).currency);
+  }
+  if (data && typeof data === "object" && "timezone" in data) {
+    setOrgTimezone((data as { timezone?: unknown }).timezone);
   }
 }
 

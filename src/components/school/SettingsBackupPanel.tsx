@@ -47,6 +47,12 @@ import {
   type BackupProvider,
   type BackupSettings,
 } from "@/lib/api/backup";
+import {
+  normalizeTimezone,
+  setOrgTimezone,
+  timezoneOption,
+  type TimezoneCode,
+} from "@/lib/locale/timezones";
 import { cn } from "@/lib/utils";
 
 const panelClass = "min-w-0 overflow-hidden rounded-[22px]";
@@ -71,9 +77,40 @@ function destinationLabel(provider: BackupProvider): string {
   return provider === "google_drive" ? "Google Drive" : provider;
 }
 
-function formatStamp(raw: string | null | undefined, suffix = ""): string {
+/** Backend stores job/schedule stamps in UTC; show them in org base timezone. */
+function parseUtcStamp(raw: string): Date | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const withT = t.includes("T") ? t : t.replace(" ", "T");
+  const iso = /[zZ]|[+-]\d{2}:?\d{2}$/.test(withT) ? withT : `${withT}Z`;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatStamp(raw: string | null | undefined, timeZone?: string | null): string {
   if (!raw) return "—";
-  return `${raw.replace("T", " ").slice(0, 19)}${suffix}`;
+  const tz = normalizeTimezone(timeZone);
+  const opt = timezoneOption(tz);
+  const d = parseUtcStamp(raw);
+  if (!d) {
+    return `${raw.replace("T", " ").slice(0, 19)} ${opt.short}`;
+  }
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+      .formatToParts(d)
+      .filter((p) => p.type !== "literal")
+      .map((p) => [p.type, p.value]),
+  ) as Record<string, string>;
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second} ${opt.short}`;
 }
 
 function jobStatusClass(status: BackupJob["status"]): string {
@@ -129,6 +166,7 @@ export function SettingsBackupPanel() {
       setWeeklyDow(String(bundle.settings.weeklyDow || 1));
       setRunTime(bundle.settings.runTime || "02:00");
       setPassphraseHint(bundle.settings.passphraseHint || "");
+      if (bundle.settings.timezone) setOrgTimezone(bundle.settings.timezone);
     } catch (err) {
       toast.error(errMessage(err));
     } finally {
@@ -254,11 +292,13 @@ export function SettingsBackupPanel() {
 
   const latestSuccess = jobs.find((j) => j.status === "success" && j.downloadAvailable);
   const hasPassphrase = Boolean(settings?.passphraseSet);
+  const orgTz = normalizeTimezone(settings?.timezone) as TimezoneCode;
+  const orgTzLabel = timezoneOption(orgTz).short;
   const nextScheduled =
     settings?.frequency === "off"
       ? "Off"
       : settings?.nextRunAt
-        ? formatStamp(settings.nextRunAt, " UTC")
+        ? formatStamp(settings.nextRunAt, orgTz)
         : "—";
 
   if (loading && !settings) {
@@ -304,7 +344,7 @@ export function SettingsBackupPanel() {
                   Last success
                 </div>
                 <div className="mt-1.5 text-[13.5px] font-semibold tracking-tight text-black dark:text-zinc-50">
-                  {settings?.lastSuccessAt ? formatStamp(settings.lastSuccessAt) : "Never"}
+                  {settings?.lastSuccessAt ? formatStamp(settings.lastSuccessAt, orgTz) : "Never"}
                 </div>
               </div>
               <div className="rounded-2xl border border-[#E7F0EE] bg-white/80 px-3.5 py-3 backdrop-blur dark:border-white/10 dark:bg-zinc-900/60">
@@ -387,7 +427,8 @@ export function SettingsBackupPanel() {
         <OrganicCard tone="white" cornerSide="tr" padded className={cn(panelClass, "flex h-full flex-col")}>
           <SectionTitle title="Schedule" tip={BACKUP_SCHEDULE_TIP} icon={Clock3} />
           <p className="mt-2 text-[12.5px] leading-relaxed text-black/55 dark:text-zinc-400">
-            Times are India Standard Time ({settings?.timezone || "Asia/Kolkata"}).
+            Schedule times use your organisation base timezone (
+            {timezoneOption(orgTz).label}). Change it under System → Base timezone.
           </p>
           <div className="mt-4 flex flex-1 flex-col gap-3">
             <div>
@@ -422,7 +463,7 @@ export function SettingsBackupPanel() {
             ) : null}
             {frequency !== "off" ? (
               <div>
-                <Label className="text-[12px] text-black/60">Time (IST)</Label>
+                <Label className="text-[12px] text-black/60">Time ({orgTzLabel})</Label>
                 <div className="mt-1.5 flex h-11 items-stretch overflow-hidden rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900">
                   <TimePicker24
                     value={runTime}
@@ -639,7 +680,7 @@ export function SettingsBackupPanel() {
                       {job.id}
                     </div>
                     <div className="mt-1 text-[12.5px] text-black/60 dark:text-zinc-400">
-                      {formatStamp(job.finishedAt || job.createdAt)} · {formatBackupBytes(job.byteSize)}
+                      {formatStamp(job.finishedAt || job.createdAt, orgTz)} · {formatBackupBytes(job.byteSize)}
                     </div>
                   </div>
                   <span
@@ -720,7 +761,7 @@ export function SettingsBackupPanel() {
                       {formatBackupBytes(job.byteSize)}
                     </td>
                     <td className="py-3 pr-3 text-black/55 dark:text-zinc-400">
-                      {formatStamp(job.finishedAt || job.createdAt)}
+                      {formatStamp(job.finishedAt || job.createdAt, orgTz)}
                     </td>
                     <td className="py-3 text-right">
                       {job.downloadAvailable ? (

@@ -1592,7 +1592,7 @@ export const HELP_GUIDES: HelpGuide[] = [
   pass --> dest{Connect_Google_Drive}
   dest -->|Optional| drive[Google_Drive]
   dest --> manual[Create_Backup_Now]
-  drive --> schedule[Daily_or_Weekly_IST]
+  drive --> schedule[Daily_or_Weekly_org_timezone]
   manual --> zip[Encrypted_ZIP]
   schedule --> zip
   zip --> keep[Download_or_Drive_Folder]`,
@@ -1620,7 +1620,7 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Turn on a schedule",
-        body: "Under **Schedule**, choose **Daily** or **Weekly**, set the time in **IST**, and tap **Save schedule**. Cron on the server runs the job and uploads to Google Drive.",
+        body: "Under **Schedule**, choose **Daily** or **Weekly**, set the time in your **organisation base timezone** (Settings → System → Base timezone), and tap **Save schedule**. Cron on the server runs the job and uploads to Google Drive.",
         tip: "Schedule stays off until a passphrase is set and Google Drive is connected.",
       },
       {
@@ -2023,7 +2023,7 @@ export const HELP_FAQS: HelpFaq[] = [
     id: "how-backup",
     question: "How do I back up my school data?",
     answer:
-      "Open Settings → Backup. Set a passphrase under Security, optionally Connect Google Drive, then Create backup now and Download — or set Daily/Weekly schedule (IST) so Feezo uploads to Drive. Keep the passphrase offline; ZIPs are encrypted and in-app restore is not available yet.",
+      "Open Settings → Backup. Set a passphrase under Security, optionally Connect Google Drive, then Create backup now and Download — or set Daily/Weekly schedule (organisation base timezone) so Feezo uploads to Drive. Keep the passphrase offline; ZIPs are encrypted and in-app restore is not available yet.",
     guideId: "cloud-backup",
   },
   {
