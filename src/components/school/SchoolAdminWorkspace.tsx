@@ -19953,6 +19953,12 @@ function TransportBusPointPanel({
 
   return (
     <div className="space-y-3">
+      <VehicleCard
+        listLayout={listLayout}
+        transportVehicles={transportVehicles}
+        setTransportVehicles={setTransportVehicles}
+        transportRoutes={transportRoutes}
+      />
       {!inVehicleFlow ? (
         <TransportCard
           listLayout={listLayout}
@@ -19963,12 +19969,6 @@ function TransportBusPointPanel({
           feeTerms={feeTerms}
         />
       ) : null}
-      <VehicleCard
-        listLayout={listLayout}
-        transportVehicles={transportVehicles}
-        setTransportVehicles={setTransportVehicles}
-        transportRoutes={transportRoutes}
-      />
     </div>
   );
 }
@@ -22421,7 +22421,7 @@ function TransportCard({
                 </Label>
                 {selectableVehicles.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-[#E5E5E5] px-3 py-4 text-center text-[12px] text-black/45">
-                    No vehicles yet — add one in Vehicle Management below, then assign it here.
+                    No vehicles yet — add one in Vehicle Management above, then assign it here.
                   </p>
                 ) : (
                   <div className="overflow-hidden rounded-lg border border-[#E5E5E5] bg-[#FAFAFA]">

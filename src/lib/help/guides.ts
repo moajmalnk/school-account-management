@@ -1752,12 +1752,12 @@ export const HELP_GUIDES: HelpGuide[] = [
     openTo: { href: "/tenant/settings?tab=transport", label: "Open Bus Point" },
     steps: [
       {
-        title: "Add routes",
-        body: "Settings → Bus Point → Transport Routes → add a route with pickup and drop points on the map.",
+        title: "Add vehicles",
+        body: "Settings → Bus Point → Vehicle Management (first) → add each bus with Seat Capacity, Driver Name, Driver Phone and document validity (insurance, fitness). Feezo reminds you before they expire.",
       },
       {
-        title: "Add vehicles",
-        body: "Under Vehicle Management add each bus with Seat Capacity, Driver Name, Driver Phone and document validity (insurance, fitness). Feezo reminds you before they expire.",
+        title: "Add routes",
+        body: "Below that, open Transport Routes → add a route with pickup and drop points on the map, then assign vehicles from the fleet.",
       },
       {
         title: "Assign students",
