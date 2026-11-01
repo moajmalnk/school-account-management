@@ -18,6 +18,7 @@ export const SETTINGS_TABS = [
   "system",
   "support",
   "subscription",
+  "backup",
 ] as const;
 
 export type SettingsTab = (typeof SETTINGS_TABS)[number];

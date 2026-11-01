@@ -36,6 +36,7 @@ export const PERMISSION_KEYS = [
   "settings.users",
   "settings.system",
   "settings.subscription",
+  "settings.backup",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -63,6 +64,7 @@ const PERMISSION_FALLBACKS: Partial<Record<PermissionKey, readonly PermissionKey
   "settings.transport": ["settings"],
   "settings.system": ["settings"],
   "settings.subscription": ["settings"],
+  "settings.backup": ["settings"],
 };
 
 export const PERMISSION_GROUPS: {
@@ -105,6 +107,7 @@ export const PERMISSION_GROUPS: {
       "settings.users",
       "settings.system",
       "settings.subscription",
+      "settings.backup",
     ],
   },
 ];
@@ -145,6 +148,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   "settings.users": "Team users",
   "settings.system": "System",
   "settings.subscription": "Subscription",
+  "settings.backup": "Backup",
 };
 
 export const ALL_PERMISSIONS: PermissionSet = ["*"];
@@ -212,7 +216,8 @@ export type SettingsTabId =
   | "system"
   | "support"
   | "users"
-  | "subscription";
+  | "subscription"
+  | "backup";
 
 /** Subscription plan feature matrix (from Super Admin Plans). */
 export type PlanFlags = {
@@ -233,6 +238,7 @@ export type PlanFlags = {
   branches: boolean;
   globalSearch: boolean;
   exams: boolean;
+  backup: boolean;
 };
 
 export const DEFAULT_PLAN_FLAGS: PlanFlags = {
@@ -253,6 +259,7 @@ export const DEFAULT_PLAN_FLAGS: PlanFlags = {
   branches: true,
   globalSearch: true,
   exams: true,
+  backup: false,
 };
 
 /** Catalog labels for Super Admin Plans and tenant Subscriptions. */
@@ -274,6 +281,7 @@ export const PLAN_FEATURE_ITEMS: { key: keyof PlanFlags; label: string }[] = [
   { key: "branches", label: "Multiple Branches" },
   { key: "globalSearch", label: "Global Search" },
   { key: "exams", label: "Exam grading" },
+  { key: "backup", label: "Cloud Backup" },
 ];
 
 export function normalizePlanFlags(value: unknown): PlanFlags {
@@ -298,6 +306,7 @@ const SETTINGS_TAB_PLAN_FLAG: Partial<Record<SettingsTabId, keyof PlanFlags>> = 
   transport: "vehicle",
   users: "extraUsers",
   branches: "branches",
+  backup: "backup",
 };
 
 export function planAllowsSettingsTab(
@@ -368,6 +377,7 @@ const SETTINGS_TAB_PERMISSION: Partial<Record<SettingsTabId, PermissionKey>> = {
   users: "settings.users",
   system: "settings.system",
   subscription: "settings.subscription",
+  backup: "settings.backup",
   support: "support",
   academics: "academics",
 };

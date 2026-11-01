@@ -90,11 +90,7 @@ function LoginPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const reason = new URLSearchParams(window.location.search).get("reason");
-    if (reason === "inactive") {
-      toast.message("Signed out after 14 days without use", {
-        description: "Sign in again to continue.",
-      });
-    } else if (reason === "session_expired") {
+    if (reason === "inactive" || reason === "session_expired") {
       toast.error("Please sign in again to continue");
     } else if (reason === "deactivated") {
       setBannerError(SCHOOL_DEACTIVATED_MESSAGE);

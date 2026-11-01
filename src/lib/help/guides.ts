@@ -108,7 +108,7 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Use the menu to move between modules",
-        body: "Dashboard, Students, Attendance, Staff, Finance, Support, and Settings. Subscription is a tab inside Settings.",
+        body: "Dashboard, Students, Attendance, Staff, Finance, Support, and Settings. Subscription and Backup are tabs inside Settings.",
       },
       {
         title: "Quick actions on the Dashboard",
@@ -1564,6 +1564,76 @@ export const HELP_GUIDES: HelpGuide[] = [
     related: ["switch-campus-year", "team-users", "document-numbers", "ledgers-setup"],
   },
   {
+    id: "cloud-backup",
+    category: "settings",
+    title: "Back up school data to Drive",
+    summary:
+      "Export an encrypted ZIP of your school, download it, or schedule daily/weekly uploads to Google Drive or OneDrive.",
+    minutes: 5,
+    access: { kind: "settings", tab: "backup" },
+    procedure: "setup",
+    keywords: [
+      "backup",
+      "cloud backup",
+      "google drive",
+      "onedrive",
+      "export",
+      "download zip",
+      "encrypted",
+      "passphrase",
+      "schedule",
+      "disaster recovery",
+      "data copy",
+    ],
+    openTo: { href: "/tenant/settings?tab=backup", label: "Open Backup" },
+    flowchart: {
+      title: "Backup flow",
+      mermaid: `flowchart TD
+  openNode[Open_Settings_Backup] --> pass[Set_Passphrase]
+  pass --> dest{Connect_Drive}
+  dest -->|Optional| drive[Google_or_OneDrive]
+  dest --> manual[Create_Backup_Now]
+  drive --> schedule[Daily_or_Weekly_IST]
+  manual --> zip[Encrypted_ZIP]
+  schedule --> zip
+  zip --> keep[Download_or_Drive_Folder]`,
+    },
+    steps: [
+      {
+        title: "Open Backup",
+        body: "Go to **Settings → Backup**. If the tab is missing, your plan needs the **Cloud Backup** feature, or your login needs the **Backup** permission.",
+        image: IMG.setup,
+      },
+      {
+        title: "Set a passphrase",
+        body: "Under **Security**, enter a passphrase (at least 8 characters) and optional hint, then save. When Feezo shows the passphrase once, **copy it and store it offline** — every ZIP opens with this password.",
+        tip: "To rotate later, enter the current passphrase plus the new one.",
+        warning: "If you lose the passphrase, Feezo cannot recover old ZIP passwords.",
+      },
+      {
+        title: "Connect Drive (optional but needed for schedules)",
+        body: "Under **Destinations**, tap **Connect** for **Google Drive** and/or **OneDrive**. Sign in with the school account that should own the files. Feezo creates a **Feezo Backups** folder.",
+      },
+      {
+        title: "Create a manual backup",
+        body: "Tap **Create backup now**. Wait until the job shows **success**, then tap **Download**. Keep the ZIP and passphrase together in a safe place.",
+        tip: "Manual backups also upload to connected Drive accounts when those destinations are linked.",
+      },
+      {
+        title: "Turn on a schedule",
+        body: "Under **Schedule**, choose **Daily** or **Weekly**, set the time in **IST**, and tap **Save schedule**. Cron on the server runs the job and uploads to connected destinations.",
+        tip: "Schedule stays off until a passphrase is set and at least one Drive is connected.",
+      },
+      {
+        title: "What is inside the ZIP",
+        body: "The file includes **manifest.json**, per-table JSON under **data/**, and school **uploads/** (logos, documents). Sessions and password hashes are excluded or redacted.",
+        warning:
+          "This is a copy for your records. In-app restore is not available yet — contact Feezo support if you need help recovering from a backup file.",
+      },
+    ],
+    related: ["school-profile", "team-users"],
+  },
+  {
     id: "team-users",
     category: "settings",
     title: "Team logins and permissions",
@@ -1893,7 +1963,7 @@ export const HELP_FAQS: HelpFaq[] = [
     id: "logged-out",
     question: "I keep getting logged out",
     answer:
-      "For security, a session ends when it expires or when your admin changes your access. Sign in again; everything you saved is kept. If it happens every few minutes, clear this site's data in the browser and sign in once more.",
+      "You stay signed in until you click Logout, or until an admin revokes your access. Sign in again; everything you saved is kept. If it happens every few minutes, clear this site's data in the browser and sign in once more.",
   },
   {
     id: "deactivated",
@@ -1950,7 +2020,30 @@ export const HELP_FAQS: HelpFaq[] = [
       "Open Settings → Fee Category → Parent Pay now. Turn Allow parents to pay online On and Save. Checkout uses Cashfree (managed by Feezo) — you do not enter Razorpay or other gateway keys. Parents pay in the family app; staff can share a WhatsApp Pay link or use Online at the counter. Settings → Subscription is only for renewing your Feezo plan.",
     guideId: "parent-pay",
   },
+  {
+    id: "how-backup",
+    question: "How do I back up my school data?",
+    answer:
+      "Open Settings → Backup. Set a passphrase under Security, optionally Connect Google Drive or OneDrive, then Create backup now and Download — or set Daily/Weekly schedule (IST) so Feezo uploads to Drive. Keep the passphrase offline; ZIPs are encrypted and in-app restore is not available yet.",
+    guideId: "cloud-backup",
+  },
+  {
+    id: "backup-tab-missing",
+    question: "I can't see Settings → Backup",
+    answer:
+      "Cloud Backup must be enabled on your subscription plan (Premium/Enterprise or a custom flag), and your login needs the Backup permission (school admins have it). Ask your admin or Feezo support if the tab is still missing.",
+    guideId: "cloud-backup",
+  },
+  {
+    id: "backup-passphrase-lost",
+    question: "I forgot the backup passphrase",
+    answer:
+      "Feezo cannot recover the password for ZIPs already created. Set a new passphrase under Settings → Backup → Security for future backups. Old ZIP files still need the old passphrase to open on your computer.",
+    guideId: "cloud-backup",
+  },
 ];
+
+
 
 export type QuickTask = { label: string; guideId: string };
 
@@ -1962,4 +2055,5 @@ export const HELP_QUICK_TASKS: QuickTask[] = [
   { label: "Connect biometric", guideId: "biometric-devices" },
   { label: "Set fee structure", guideId: "classes-fees" },
   { label: "Add a team login", guideId: "team-users" },
+  { label: "Back up to Drive", guideId: "cloud-backup" },
 ];

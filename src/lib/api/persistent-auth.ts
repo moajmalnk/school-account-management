@@ -1,6 +1,7 @@
 /**
- * Persistent web session (WhatsApp Web style):
- * stay signed in across tab/browser close until Logout, or 14 days unused.
+ * Persistent web session:
+ * stay signed in across tab/browser close until the user clicks Logout
+ * (or an admin revokes access / deactivates the school).
  */
 export const ACCESS_TOKEN_KEY = "school-accounts/api-token/v1";
 export const REFRESH_TOKEN_KEY = "school-accounts/refresh-token/v1";
@@ -8,9 +9,12 @@ export const AUTH_SESSION_ID_KEY = "school-accounts/session-id/v1";
 export const DEVICE_ID_KEY = "school-accounts/device-id/v1";
 export const LAST_ACTIVE_KEY = "school-accounts/last-active/v1";
 
-/** Sign out locally if the browser was unused this long. */
-export const SESSION_IDLE_DAYS = 14;
-export const SESSION_IDLE_MS = SESSION_IDLE_DAYS * 24 * 60 * 60 * 1000;
+/**
+ * Legacy idle constants — kept for activity telemetry / API payloads.
+ * Local idle sign-out is disabled (`isLocalIdleExpired` always false).
+ */
+export const SESSION_IDLE_DAYS = 0;
+export const SESSION_IDLE_MS = 0;
 
 /** Refresh the access JWT this far before `exp`. */
 export const ACCESS_REFRESH_SKEW_MS = 5 * 60 * 1000;
@@ -103,10 +107,9 @@ export function touchLastActive(force = false) {
   storageSet(LAST_ACTIVE_KEY, String(now));
 }
 
-export function isLocalIdleExpired(now = Date.now()): boolean {
-  const last = readLastActiveAt();
-  if (!last) return false;
-  return now - last > SESSION_IDLE_MS;
+/** Always false — web stays signed in until Logout (or server revoke). */
+export function isLocalIdleExpired(_now = Date.now()): boolean {
+  return false;
 }
 
 /** Clear login secrets. Keeps device id so the same browser is recognized. */

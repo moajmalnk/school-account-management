@@ -73,6 +73,7 @@ export type SuperAdminPlanFlags = {
   branches: boolean;
   globalSearch: boolean;
   exams: boolean;
+  backup: boolean;
 };
 
 export type SuperAdminPlan = {

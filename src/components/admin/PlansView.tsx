@@ -37,6 +37,7 @@ const EMPTY_FLAGS: SuperAdminPlanFlags = {
   branches: false,
   globalSearch: false,
   exams: false,
+  backup: false,
 };
 
 /** Catalog defaults — used when API is empty / offline */
@@ -81,6 +82,7 @@ const DEFAULT_PLANS: SuperAdminPlan[] = [
       globalSearch: true,
       studentAttendance: true,
       exams: true,
+      backup: true,
     },
   },
   {
@@ -108,6 +110,7 @@ const DEFAULT_PLANS: SuperAdminPlan[] = [
       branches: true,
       globalSearch: true,
       exams: true,
+      backup: true,
     },
   },
 ];

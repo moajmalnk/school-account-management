@@ -342,12 +342,11 @@ export async function refreshAccessToken(): Promise<TokenRefreshResult> {
 }
 
 /**
- * Keep the device signed in while it is used.
+ * Keep the device signed in until Logout.
  * Network failures do not sign the user out.
  */
 export async function ensureFreshAccessToken(): Promise<TokenRefreshResult> {
   if (isImpersonating()) return "ok";
-  if (isLocalIdleExpired()) return "invalid";
 
   const stored =
     typeof window === "undefined" ? null : window.localStorage.getItem(ACCESS_TOKEN_KEY);

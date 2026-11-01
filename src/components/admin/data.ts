@@ -21,6 +21,8 @@ export type Tenant = {
   /** Seat fill % (students / capacity). */
   seatUtilizationPct?: number;
   createdAt: string;
+  /** Full signup timestamp when available (ISO / SQL datetime). */
+  signedUpAt?: string | null;
   /** Primary school admin login email (username). */
   adminEmail?: string;
   /** Set while a Super Admin has deactivated the workspace (status Suspended). */
@@ -30,4 +32,9 @@ export type Tenant = {
   statusBeforeDisable?: Status | null;
   /** When false, school PDFs omit the Feezo footer credit. Omitted means on. */
   pdfCreditEnabled?: boolean;
+  /** Active session heartbeat within ~15 minutes. */
+  onlineNow?: boolean;
+  lastSeenAt?: string | null;
+  lastLoginAt?: string | null;
+  lastLogoutAt?: string | null;
 };

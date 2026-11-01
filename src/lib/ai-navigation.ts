@@ -35,6 +35,7 @@ const SETTINGS_TABS = [
   "system",
   "support",
   "subscription",
+  "backup",
 ] as const;
 
 const STUDENT_TABS = ["profile", "academic", "attendance", "documents", "payments", "parents-app"] as const;
@@ -138,6 +139,21 @@ const ALIASES: Record<string, { to: FeezoNavPath; search?: Record<string, string
       to: "/tenant/settings",
       search: { tab: "subscription" },
       label: "Subscription",
+    },
+    backup: {
+      to: "/tenant/settings",
+      search: { tab: "backup" },
+      label: "Backup",
+    },
+    "cloud.backup": {
+      to: "/tenant/settings",
+      search: { tab: "backup" },
+      label: "Backup",
+    },
+    "cloud-backup": {
+      to: "/tenant/settings",
+      search: { tab: "backup" },
+      label: "Backup",
     },
     support: { to: "/tenant/support", label: "Help & support" },
     help: { to: "/tenant/support", label: "Help & support" },
@@ -467,7 +483,7 @@ export function feezoNavigationCatalogText(): string {
     "- /tenant/staff/edit?id=STF-…",
     `- /tenant/finance?tab=<${financeTabs}>`,
     "  Optional finance search: studentId, staffId, paymentId, amount, month (YYYY-MM), feeKind (tuition|vehicle), periods",
-    "- /tenant/settings?tab=school|branches|classes|departments|roles|leave|fees|users|vehicles|transport|system|support|subscription",
+    "- /tenant/settings?tab=school|branches|classes|departments|roles|leave|fees|users|vehicles|transport|system|backup|support|subscription",
     "- /tenant/notifications",
     "- /tenant/support?guide=<guide-id>&q=<search> (step-by-step help guides; use for 'how do I…' questions)",
     "Shortcuts: fees, overdue, receive, make, transfer, attendance, biometric, devices, ledger, journals, trial, pl, balance, concession, salary, daybook, recon, help",

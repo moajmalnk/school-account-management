@@ -118,6 +118,62 @@ const TRIAL_WINDOW_LABEL: Record<TrialWindow, string> = {
 
 type TrialInfo = { day: number; daysLeft: number; endsAt: Date };
 
+/** Activity metrics from Recent activity cards — used as filter focus. */
+type ActivityMetric = "signed-up" | "last-seen" | "last-login" | "last-logout";
+type ActivityWindow = "online" | "today" | "7d" | "30d" | "never";
+
+const ACTIVITY_METRIC_LABEL: Record<ActivityMetric, string> = {
+  "signed-up": "Signed up",
+  "last-seen": "Last seen",
+  "last-login": "Last login",
+  "last-logout": "Last logout",
+};
+
+const ACTIVITY_WINDOW_LABEL: Record<ActivityWindow, string> = {
+  online: "Online now",
+  today: "Today",
+  "7d": "≤ 7 days",
+  "30d": "≤ 30 days",
+  never: "Never",
+};
+
+function activityTimestamp(t: Tenant, metric: ActivityMetric): number | null {
+  const raw =
+    metric === "signed-up"
+      ? t.signedUpAt || t.createdAt
+      : metric === "last-seen"
+        ? t.lastSeenAt
+        : metric === "last-login"
+          ? t.lastLoginAt
+          : t.lastLogoutAt;
+  if (!raw) return null;
+  const d = parseServerDate(raw);
+  return d ? d.getTime() : null;
+}
+
+function matchesActivityWindow(
+  t: Tenant,
+  metric: ActivityMetric,
+  window: ActivityWindow,
+  now = Date.now(),
+): boolean {
+  if (window === "online") {
+    return metric === "last-seen" && Boolean(t.onlineNow);
+  }
+  const ts = activityTimestamp(t, metric);
+  if (window === "never") return ts === null;
+  if (ts === null) return false;
+  const age = now - ts;
+  if (window === "today") {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return ts >= start.getTime();
+  }
+  if (window === "7d") return age <= 7 * DAY_MS;
+  if (window === "30d") return age <= 30 * DAY_MS;
+  return false;
+}
+
 function parseServerDate(raw: string | undefined): Date | null {
   if (!raw) return null;
   const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
@@ -275,6 +331,8 @@ export function TenantsView({
   const [query, setQuery] = useState("");
   const [tier, setTier] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
+  const [activityMetric, setActivityMetric] = useState<ActivityMetric | "all">("last-seen");
+  const [activityWindow, setActivityWindow] = useState<ActivityWindow | "all">("all");
   const [open, setOpen] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -347,6 +405,26 @@ export function TenantsView({
     return counts;
   }, [trialById]);
 
+  const activityCounts = useMemo(() => {
+    const now = Date.now();
+    const metric: ActivityMetric =
+      activityMetric === "all" ? "last-seen" : activityMetric;
+    const counts: Record<ActivityWindow, number> = {
+      online: 0,
+      today: 0,
+      "7d": 0,
+      "30d": 0,
+      never: 0,
+    };
+    for (const t of tenants) {
+      for (const w of Object.keys(counts) as ActivityWindow[]) {
+        if (w === "online" && metric !== "last-seen") continue;
+        if (matchesActivityWindow(t, metric, w, now)) counts[w] += 1;
+      }
+    }
+    return counts;
+  }, [tenants, activityMetric]);
+
   const registryStats = useMemo(() => {
     let active = 0;
     let trial = 0;
@@ -377,6 +455,7 @@ export function TenantsView({
   }, [tenants]);
 
   const filtered = useMemo(() => {
+    const now = Date.now();
     const list = tenants.filter((t) => {
       if (tier !== "all" && t.tier !== tier) return false;
       if (status.startsWith("trial-")) {
@@ -386,15 +465,29 @@ export function TenantsView({
       }
       if (query && !`${t.name} ${t.subdomain} ${t.id}`.toLowerCase().includes(query.toLowerCase()))
         return false;
+      if (activityMetric !== "all" && activityWindow !== "all") {
+        if (!matchesActivityWindow(t, activityMetric, activityWindow, now)) return false;
+      }
       return true;
     });
     if (status.startsWith("trial-")) {
       list.sort(
         (a, b) => (trialById.get(a.id)?.daysLeft ?? 0) - (trialById.get(b.id)?.daysLeft ?? 0),
       );
+    } else if (activityMetric !== "all") {
+      list.sort((a, b) => {
+        if (activityMetric === "last-seen") {
+          const ao = a.onlineNow ? 1 : 0;
+          const bo = b.onlineNow ? 1 : 0;
+          if (ao !== bo) return bo - ao;
+        }
+        const at = activityTimestamp(a, activityMetric) ?? 0;
+        const bt = activityTimestamp(b, activityMetric) ?? 0;
+        return bt - at;
+      });
     }
     return list;
-  }, [tenants, tier, status, query, trialById]);
+  }, [tenants, tier, status, query, trialById, activityMetric, activityWindow]);
 
   const updateTenant = (id: string, patch: Partial<Tenant>) => {
     setTenants((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -691,6 +784,77 @@ export function TenantsView({
               </button>
             );
           })}
+        </div>
+
+        <div className="flex w-full flex-col gap-2 sm:basis-full">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-wider text-black/40">
+              Activity
+            </span>
+            {(Object.keys(ACTIVITY_METRIC_LABEL) as ActivityMetric[]).map((metric) => {
+              const active = activityMetric === metric;
+              return (
+                <button
+                  key={metric}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    if (active) {
+                      setActivityMetric("all");
+                      setActivityWindow("all");
+                      return;
+                    }
+                    setActivityMetric(metric);
+                    if (activityWindow === "online" && metric !== "last-seen") {
+                      setActivityWindow("all");
+                    }
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors",
+                    active
+                      ? "border-[#0F766E] bg-[#0F766E] text-white"
+                      : "border-[#E5E5E5] bg-white text-black/65 hover:border-[#0F766E]/40 hover:text-[#0F766E]",
+                  )}
+                >
+                  {ACTIVITY_METRIC_LABEL[metric]}
+                </button>
+              );
+            })}
+          </div>
+
+          {activityMetric !== "all" ? (
+            <div className="flex flex-wrap items-center gap-1.5 pl-0 sm:pl-[4.75rem]">
+              {(Object.keys(ACTIVITY_WINDOW_LABEL) as ActivityWindow[])
+                .filter((w) => w !== "online" || activityMetric === "last-seen")
+                .map((w) => {
+                  const active = activityWindow === w;
+                  return (
+                    <button
+                      key={w}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setActivityWindow(active ? "all" : w)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors",
+                        active
+                          ? "border-[#0F766E] bg-[#CCFBF1] text-[#0F766E]"
+                          : "border-[#E5E5E5] bg-white text-black/65 hover:border-[#0F766E]/40 hover:text-[#0F766E]",
+                      )}
+                    >
+                      {ACTIVITY_WINDOW_LABEL[w]}
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 font-mono text-[10.5px] tabular-nums",
+                          active ? "bg-[#0F766E]/15 text-[#0F766E]" : "bg-[#F0FDFA] text-[#0F766E]",
+                        )}
+                      >
+                        {activityCounts[w]}
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+          ) : null}
         </div>
       </OrganicCard>
 

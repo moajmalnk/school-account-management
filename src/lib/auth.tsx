@@ -25,7 +25,6 @@ import {
   ensureFreshAccessToken,
   getApiToken,
   hasPersistedCredentials,
-  isLocalIdleExpired,
   onUnauthorized,
   restoreApiTokenBackup,
   setApiToken,
@@ -514,15 +513,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (!impersonated && isLocalIdleExpired()) {
-        clearAllAuthState();
-        if (!cancelled) {
-          setSession(null);
-          setHydrated(true);
-        }
-        return;
-      }
-
       if (existing && (token || (!impersonated && hasPersistedCredentials()))) {
         if (!impersonated) {
           const freshness = await ensureFreshAccessToken();
@@ -644,18 +634,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  // Keep the access JWT fresh while the tab is open — never idle-sign-out.
   useEffect(() => {
     if (!session || session.impersonated) return;
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      if (isLocalIdleExpired()) {
-        clearAllAuthState();
-        setSession(null);
-        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-          window.location.replace("/login?reason=inactive");
-        }
-        return;
-      }
       touchLastActive();
       void ensureFreshAccessToken();
     };

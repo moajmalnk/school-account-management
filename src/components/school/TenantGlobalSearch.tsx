@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CreditCard,
   Crown,
+  HardDrive,
   GraduationCap,
   LayoutDashboard,
   LifeBuoy,
@@ -191,7 +192,7 @@ function buildNavCatalog(session: ReturnType<typeof useAuth>["session"]): NavSea
   const settingsTabs: NavSearchItem[] = [
     {
       id: "settings-school",
-      label: "School Details",
+      label: "School",
       hint: "Settings",
       keywords: "school details profile address phone email",
       to: "/tenant/settings",
@@ -279,6 +280,16 @@ function buildNavCatalog(session: ReturnType<typeof useAuth>["session"]): NavSea
       search: { tab: "system" },
       icon: Settings,
       allowed: settingsTab("system"),
+    },
+    {
+      id: "settings-backup",
+      label: "Backup",
+      hint: "Settings",
+      keywords: "backup cloud drive google onedrive export zip encrypt passphrase schedule",
+      to: "/tenant/settings",
+      search: { tab: "backup" },
+      icon: HardDrive,
+      allowed: settingsTab("backup"),
     },
     {
       id: "settings-support",

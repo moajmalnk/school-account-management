@@ -464,3 +464,43 @@ export const DOWNLOADS_TIP: InfoTipContent = {
     "Clear a field to restore the default. Names apply across the whole organisation.",
   ],
 };
+
+export const BACKUP_TIP: InfoTipContent = {
+  title: "School backup — full setup",
+  points: [
+    "Open Settings → Backup (needs Cloud Backup on your plan and Backup permission).",
+    "Under Security, set a passphrase (8+ characters). Copy it when Feezo shows it once — you need it to open every ZIP.",
+    "Optional: Connect Google Drive and/or OneDrive. Feezo creates a Feezo Backups folder.",
+    "Manual: tap Create backup now, wait until Success, then Download. Or set Schedule to Daily/Weekly (IST) so cron uploads to Drive.",
+    "The ZIP holds manifest.json, data tables, and uploads. It is for your records — in-app restore is not available yet.",
+  ],
+  note: "If Backup is missing from Settings, ask Feezo support or your admin to enable Cloud Backup on the plan.",
+};
+
+export const BACKUP_SCHEDULE_TIP: InfoTipContent = {
+  title: "Backup schedule",
+  points: [
+    "Off = only manual backups.",
+    "Daily or Weekly runs in India Standard Time (IST).",
+    "Scheduled runs need a passphrase and at least one connected Drive destination.",
+  ],
+};
+
+export const BACKUP_DESTINATIONS_TIP: InfoTipContent = {
+  title: "Drive destinations",
+  points: [
+    "Connect Google Drive or OneDrive with the school Google/Microsoft account you want to own the files.",
+    "Feezo uploads into a Feezo Backups folder.",
+    "If status shows Reconnect required, tap Reconnect and grant offline access again.",
+  ],
+};
+
+export const BACKUP_SECURITY_TIP: InfoTipContent = {
+  title: "Backup passphrase",
+  points: [
+    "Every ZIP is password-protected with this passphrase.",
+    "Feezo shows the passphrase once when you set or rotate it — store it offline.",
+    "Rotating requires the current passphrase. Lost passphrase means you cannot open old ZIPs.",
+  ],
+  note: "Never share the passphrase in Support chat screenshots.",
+};

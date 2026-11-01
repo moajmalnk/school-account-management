@@ -86,4 +86,15 @@ export const HELP_GLOSSARY: GlossaryTerm[] = [
     term: "Campus (branch)",
     meaning: "A separate school location with its own students and books under the same account.",
   },
+  {
+    term: "Cloud Backup",
+    meaning:
+      "An encrypted ZIP copy of your school’s Feezo data (tables + uploads) that you can download or upload to Google Drive / OneDrive on a schedule.",
+    example: "Settings → Backup → Create backup now, then Download with your passphrase.",
+  },
+  {
+    term: "Backup passphrase",
+    meaning:
+      "The password that encrypts every school backup ZIP. Feezo shows it once when you set or rotate it; store it offline.",
+  },
 ];

@@ -1,5 +1,12 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   AlertTriangle,
   Check,
@@ -7,7 +14,9 @@ import {
   Download,
   FileText,
   Loader2,
+  Lock,
   Receipt,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,6 +24,7 @@ import {
   PlatformDocumentPreview,
   type PlatformDocKind,
 } from "@/components/admin/PlatformDocumentPreview";
+import { PlanFeatureDetailDialog } from "@/components/school/PlanFeatureDetailDialog";
 import {
   SubscriptionRenewDialog,
   type SubscriptionCycle,
@@ -39,7 +49,7 @@ import {
 } from "@/lib/api/subscription";
 import { checkoutReturnUrl, openCashfreeCheckout } from "@/lib/cashfree-checkout";
 import type { PlatformInvoice } from "@/lib/api/super-admin";
-import { PLAN_FEATURE_ITEMS } from "@/lib/permissions";
+import { PLAN_FEATURE_ITEMS, type PlanFlags } from "@/lib/permissions";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -112,11 +122,11 @@ function resolveDisplayStatus(
   return "Active";
 }
 
-function statusClass(status: DisplayStatus): string {
-  if (status === "Active") return "text-[#0F766E]";
-  if (status === "Trial") return "text-[#0F766E]";
-  if (status === "Expires soon") return "text-[#C2410C]";
-  return "text-[#EF4444]";
+function statusBadgeClass(status: DisplayStatus): string {
+  if (status === "Active") return "bg-[#CCFBF1] text-[#0F766E]";
+  if (status === "Trial") return "bg-[#E0F2FE] text-[#0369A1]";
+  if (status === "Expires soon") return "bg-[#FFEDD5] text-[#C2410C]";
+  return "bg-[#FEE2E2] text-[#DC2626]";
 }
 
 function invoiceStatusClass(status: string): string {
@@ -139,13 +149,13 @@ function InvoiceDocRow({
 }) {
   const paid = invoice.status === "Paid";
   return (
-    <li className="px-4 py-3">
+    <li className="group px-4 py-3.5 transition-colors hover:bg-[#FAFAFA] dark:hover:bg-white/[0.03] sm:px-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-50">
+          <div className="truncate text-[13.5px] font-semibold tracking-tight text-black dark:text-zinc-50">
             {invoice.invoiceNumber}
           </div>
-          <div className="mt-0.5 font-mono text-[10.5px] text-black/45 dark:text-zinc-500">
+          <div className="mt-1 text-[11.5px] leading-snug text-black/45 dark:text-zinc-500">
             {invoice.issueDate}
             {invoice.periodLabel ? ` · ${invoice.periodLabel}` : ` · ${invoice.billingCycle}`}
             {invoice.nextDueDate ? ` · next ${invoice.nextDueDate}` : ""}
@@ -154,15 +164,15 @@ function InvoiceDocRow({
         </div>
         <span
           className={cn(
-            "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold",
+            "inline-flex shrink-0 rounded-md px-2 py-0.5 text-[10.5px] font-semibold tracking-wide",
             invoiceStatusClass(invoice.status),
           )}
         >
           {invoice.status}
         </span>
       </div>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <div className="font-mono text-[13px] font-semibold text-black dark:text-zinc-50">
+      <div className="mt-2.5 flex items-center justify-between gap-2">
+        <div className="text-[14px] font-semibold tabular-nums tracking-tight text-black dark:text-zinc-50">
           {formatMoney(invoice.total, invoice.currency || currency)}
         </div>
         <div className="flex flex-wrap justify-end gap-1.5">
@@ -170,7 +180,7 @@ function InvoiceDocRow({
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 rounded-full px-2.5 text-[11px]"
+            className="h-8 rounded-lg border-[#E5E5E5] px-2.5 text-[11.5px] font-medium dark:border-white/10"
             onClick={onInvoice}
           >
             <FileText className="h-3.5 w-3.5" />
@@ -180,7 +190,7 @@ function InvoiceDocRow({
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 rounded-full px-2.5 text-[11px]"
+            className="h-8 rounded-lg border-[#E5E5E5] px-2.5 text-[11.5px] font-medium dark:border-white/10"
             disabled={!paid}
             onClick={onReceipt}
           >
@@ -195,15 +205,28 @@ function InvoiceDocRow({
 
 function DocumentsEmptyState({ schoolLabel }: { schoolLabel: string }) {
   return (
-    <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#0F766E] text-white shadow-sm">
-        <Receipt className="h-7 w-7" strokeWidth={1.75} />
+    <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
+      <span className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-[#0F766E] to-[#0D9488] text-white">
+        <Receipt className="h-5 w-5" strokeWidth={1.75} />
       </span>
-      <p className="mt-4 text-[15px] font-semibold text-black dark:text-zinc-50">No invoices yet</p>
-      <p className="mt-1 max-w-[16rem] text-[13px] leading-snug text-black/50 dark:text-zinc-400">
-        Bills for {schoolLabel} show up here after a collection is recorded. You can download the
-        invoice and the receipt from each one.
+      <p className="mt-4 text-[15px] font-semibold tracking-tight text-black dark:text-zinc-50">
+        No invoices yet
       </p>
+      <p className="mt-1.5 max-w-[17rem] text-[13px] leading-relaxed text-black/50 dark:text-zinc-400">
+        Bills for {schoolLabel} appear here after a collection is recorded. Download the invoice and
+        receipt from each one.
+      </p>
+    </div>
+  );
+}
+
+function MetaCell({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-black/35 dark:text-zinc-500">
+        {label}
+      </div>
+      <div className="mt-1.5 text-[13.5px] font-medium text-black dark:text-zinc-100">{children}</div>
     </div>
   );
 }
@@ -222,6 +245,11 @@ export function TenantSubscriptionPanel({
   const [paying, setPaying] = useState(false);
   const payingRef = useRef(false);
   const [docsOpen, setDocsOpen] = useState(false);
+  const [featureDetail, setFeatureDetail] = useState<{
+    key: keyof PlanFlags;
+    label: string;
+    included: boolean;
+  } | null>(null);
   const [preview, setPreview] = useState<{
     kind: PlatformDocKind;
     invoice: PlatformInvoice;
@@ -315,6 +343,10 @@ export function TenantSubscriptionPanel({
 
   const schoolLabel = data?.tenantName || tenantName;
   const days = daysUntil(renewalDate);
+  const includedCount = data
+    ? PLAN_FEATURE_ITEMS.filter((feature) => data.planFlags[feature.key]).length
+    : 0;
+  const featureTotal = PLAN_FEATURE_ITEMS.length;
 
   const alertCopy = useMemo(() => {
     if (outstanding) {
@@ -462,6 +494,16 @@ export function TenantSubscriptionPanel({
         }
       />
 
+      <PlanFeatureDetailDialog
+        featureKey={featureDetail?.key ?? null}
+        featureLabel={featureDetail?.label ?? ""}
+        included={Boolean(featureDetail?.included)}
+        open={Boolean(featureDetail)}
+        onOpenChange={(next) => {
+          if (!next) setFeatureDetail(null);
+        }}
+      />
+
       <Sheet open={docsOpen} onOpenChange={setDocsOpen}>
         <SheetContent
           side="right"
@@ -496,57 +538,55 @@ export function TenantSubscriptionPanel({
       </Sheet>
 
       {!loading && data?.pendingCheckout ? (
-        <div className="space-y-2">
-          <h3 className="text-[14px] font-semibold text-black dark:text-zinc-50">
-            {data.pendingCheckout.invoiceNumber
-              ? `Invoice ${data.pendingCheckout.invoiceNumber}`
-              : `${planName} renewal`}
-          </h3>
-          <div className="rounded-[22px] bg-[#FFF4D6] p-4 shadow-[0_10px_30px_-12px_rgba(26,26,75,0.12)] dark:bg-[#3d3420]/80">
-            <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#D4920A] shadow-sm dark:bg-zinc-900">
-                <FileText className="h-4 w-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-black dark:text-zinc-50">
-                  {planName} plan · {data.pendingCheckout.billingCycle}
-                </p>
-                <p className="mt-0.5 text-xs text-black/50 dark:text-zinc-400">
-                  {schoolLabel} · Payment in progress
-                </p>
-              </div>
+        <div className="overflow-hidden rounded-[22px] border border-[#F5D98A]/80 bg-[#FFF8E8] p-5 dark:border-[#A16207]/40 dark:bg-[#3d3420]/80">
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-[#D4920A] ring-1 ring-[#F5D98A]/70 dark:bg-zinc-900 dark:ring-white/10">
+              <FileText className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#A16207]/80 dark:text-[#FBBF24]/70">
+                {data.pendingCheckout.invoiceNumber
+                  ? `Invoice ${data.pendingCheckout.invoiceNumber}`
+                  : `${planName} renewal`}
+              </p>
+              <p className="mt-1 text-[15px] font-semibold tracking-tight text-black dark:text-zinc-50">
+                {planName} plan · {data.pendingCheckout.billingCycle}
+              </p>
+              <p className="mt-0.5 text-[12.5px] text-black/50 dark:text-zinc-400">
+                {schoolLabel} · Payment in progress
+              </p>
             </div>
-            <div className="mt-4 flex items-end justify-between gap-3 pl-[3.25rem]">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-black/40 dark:text-zinc-500">
-                  Status
-                </p>
-                <p className="mt-0.5 text-sm font-semibold text-[#E11D48]">Due now</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-black/40 dark:text-zinc-500">
-                  Amount
-                </p>
-                <p className="mt-0.5 text-sm font-extrabold text-black dark:text-zinc-50">
-                  {formatMoney(data.pendingCheckout.amount, currency)}
-                </p>
-              </div>
-            </div>
-            <Button
-              type="button"
-              disabled={paying}
-              onClick={() => continuePayment()}
-              className="mt-3 h-11 w-full rounded-2xl bg-[#FFC542] text-[13px] font-bold text-[#1A1A4B] hover:bg-[#F0B429]"
-            >
-              {paying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Continue payment
-            </Button>
           </div>
+          <div className="mt-4 flex items-end justify-between gap-3 sm:pl-[3.25rem]">
+            <div>
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-black/40 dark:text-zinc-500">
+                Status
+              </p>
+              <p className="mt-1 text-[13.5px] font-semibold text-[#E11D48]">Due now</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-black/40 dark:text-zinc-500">
+                Amount
+              </p>
+              <p className="mt-1 text-[15px] font-semibold tabular-nums tracking-tight text-black dark:text-zinc-50">
+                {formatMoney(data.pendingCheckout.amount, currency)}
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            disabled={paying}
+            onClick={() => continuePayment()}
+            className="mt-4 h-11 w-full rounded-xl bg-[#FFC542] text-[13px] font-semibold text-[#1A1A4B] hover:bg-[#F0B429]"
+          >
+            {paying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Continue payment
+          </Button>
         </div>
       ) : null}
 
       {showAlert && !loading && !data?.pendingCheckout ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#FFF4E5] px-4 py-3 dark:bg-[#C2410C]/20">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[#FDBA74]/50 bg-[#FFF7ED] px-4 py-3.5 dark:border-[#C2410C]/30 dark:bg-[#C2410C]/15">
           <div className="flex min-w-0 items-start gap-2.5">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#C2410C]" />
             <p className="text-[13px] leading-snug text-[#9A3412] dark:text-[#FDBA74]">
@@ -556,7 +596,7 @@ export function TenantSubscriptionPanel({
           <Button
             type="button"
             size="sm"
-            className="rounded-lg bg-[#F59E0B] px-3 text-[12px] font-semibold text-black hover:bg-[#D97706]"
+            className="h-9 rounded-xl bg-[#F59E0B] px-3.5 text-[12.5px] font-semibold text-black hover:bg-[#D97706]"
             onClick={() => setRenewOpen(true)}
           >
             Renew
@@ -564,145 +604,163 @@ export function TenantSubscriptionPanel({
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
+      <section className="overflow-hidden rounded-[22px] border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
         {loading ? (
-          <div className="flex items-center justify-center gap-2 px-4 py-14 text-[13px] text-black/45 dark:text-zinc-500">
+          <div className="flex items-center justify-center gap-2 px-4 py-16 text-[13px] text-black/45 dark:text-zinc-500">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading subscription…
           </div>
         ) : (
           <>
-            <div className="hidden grid-cols-[minmax(0,1.4fr)_0.9fr_0.9fr_0.9fr_minmax(11rem,1.1fr)] gap-3 border-b border-[#F0F0F0] px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-black/40 dark:border-white/10 dark:text-zinc-500 lg:grid">
-              <div>Subscription</div>
-              <div>Renewal date</div>
-              <div>Auto-renewal</div>
-              <div>Renewal price</div>
-              <div className="text-right">Status</div>
-            </div>
-            <div className="grid grid-cols-1 items-center gap-4 px-4 py-4 sm:px-5 lg:grid-cols-[minmax(0,1.4fr)_0.9fr_0.9fr_0.9fr_minmax(11rem,1.1fr)] lg:gap-3">
-              <button
-                type="button"
-                className="min-w-0 rounded-lg text-left"
-                onClick={() => setDocsOpen(true)}
-              >
-                <div className="truncate text-[14px] font-semibold text-black dark:text-zinc-50">
-                  {planName} plan
-                </div>
-                <div className="mt-0.5 truncate text-[12px] text-black/45 dark:text-zinc-500">
-                  {schoolLabel}
-                </div>
-              </button>
-
-              <div className="flex items-center justify-between lg:block">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-black/40 lg:hidden">
-                  Renewal date
-                </span>
-                <span className="font-mono text-[13px] text-black dark:text-zinc-100">
-                  {renewalDate || "—"}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between lg:block">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-black/40 lg:hidden">
-                  Auto-renewal
-                </span>
-                <Switch
-                  checked={autoRenew}
-                  onCheckedChange={handleAutoRenew}
-                  className="data-[state=checked]:bg-[#0F766E]"
-                  aria-label="Auto-renewal preference"
-                />
-              </div>
-
-              <div className="flex items-center justify-between lg:block">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-black/40 lg:hidden">
-                  Renewal price
-                </span>
-                <span className="text-[13px] font-semibold text-black dark:text-zinc-50">
-                  {rowPrice > 0 ? formatMoney(rowPrice, currency) : "—"}
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
-                <span
-                  className={cn(
-                    "flex items-center gap-1.5 text-[13px] font-medium",
-                    statusClass(displayStatus),
-                  )}
+            <div className="relative overflow-hidden border-b border-[#F0F0F0] px-5 py-5 sm:px-6 sm:py-6 dark:border-white/10">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(15,118,110,0.10),transparent_55%),linear-gradient(180deg,#F8FFFD_0%,#FFFFFF_72%)] dark:bg-[radial-gradient(ellipse_at_top_right,rgba(15,118,110,0.18),transparent_55%),linear-gradient(180deg,#0F1F1D_0%,#18181B_72%)]"
+              />
+              <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                <button
+                  type="button"
+                  className="min-w-0 rounded-xl text-left outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#0F766E]/35"
+                  onClick={() => setDocsOpen(true)}
                 >
-                  {displayStatus === "Expires soon" || displayStatus === "Overdue" ? (
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                  ) : null}
-                  {displayStatus}
-                </span>
-                <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#0F766E] text-white">
+                      <Sparkles className="h-4 w-4" strokeWidth={2} />
+                    </span>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold tracking-wide",
+                        statusBadgeClass(displayStatus),
+                      )}
+                    >
+                      {displayStatus === "Expires soon" || displayStatus === "Overdue" ? (
+                        <AlertTriangle className="h-3 w-3" />
+                      ) : null}
+                      {displayStatus}
+                    </span>
+                  </div>
+                  <h2 className="mt-3 text-[22px] font-semibold tracking-tight text-black dark:text-zinc-50">
+                    {planName} plan
+                  </h2>
+                  <p className="mt-1 text-[13px] text-black/50 dark:text-zinc-400">{schoolLabel}</p>
+                </button>
+
+                <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
                   {data?.pendingCheckout ? (
                     <Button
                       type="button"
-                      size="sm"
                       disabled={paying}
-                      className="h-8 rounded-lg bg-[#FFC542] px-3 text-[12px] font-semibold text-[#1A1A4B] hover:bg-[#F0B429]"
+                      className="h-10 rounded-xl bg-[#FFC542] px-4 text-[13px] font-semibold text-[#1A1A4B] hover:bg-[#F0B429]"
                       onClick={() => continuePayment()}
                     >
-                      {paying ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                      Continue
+                      {paying ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                      Continue payment
                     </Button>
                   ) : (
                     <Button
                       type="button"
-                      size="sm"
-                      className="h-8 rounded-lg bg-[#0F766E] px-3 text-[12px] font-semibold text-white hover:bg-[#0D9488]"
+                      className="h-10 rounded-xl bg-[#0F766E] px-4 text-[13px] font-semibold text-white hover:bg-[#0D9488]"
                       onClick={() => setRenewOpen(true)}
                     >
-                      Renew
+                      Renew plan
                     </Button>
                   )}
-                  <button
+                  <Button
                     type="button"
-                    className="grid h-8 w-8 place-items-center rounded-lg text-black/40 hover:bg-black/5 hover:text-black dark:text-zinc-500 dark:hover:bg-white/10 dark:hover:text-zinc-200"
-                    aria-label="View invoices and receipts"
+                    variant="outline"
+                    className="h-10 rounded-xl border-[#E5E5E5] px-3 text-[13px] font-medium dark:border-white/10"
                     onClick={() => setDocsOpen(true)}
                   >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
+                    Documents
+                    <ChevronRight className="h-3.5 w-3.5 opacity-60" />
+                  </Button>
                 </div>
               </div>
             </div>
+
+            <div className="grid grid-cols-1 gap-5 px-5 py-5 sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
+              <MetaCell label="Renewal date">
+                <span className="tabular-nums">{renewalDate || "—"}</span>
+              </MetaCell>
+              <MetaCell label="Renewal price">
+                <span className="text-[15px] font-semibold tabular-nums tracking-tight">
+                  {rowPrice > 0 ? formatMoney(rowPrice, currency) : "—"}
+                </span>
+                <span className="mt-0.5 block text-[11.5px] font-normal text-black/40 dark:text-zinc-500">
+                  {cycle === "Annual" ? "Billed yearly" : "Billed monthly"}
+                </span>
+              </MetaCell>
+              <MetaCell label="Auto-renewal">
+                <div className="flex items-center gap-2.5">
+                  <Switch
+                    checked={autoRenew}
+                    onCheckedChange={handleAutoRenew}
+                    className="data-[state=checked]:bg-[#0F766E]"
+                    aria-label="Auto-renewal preference"
+                  />
+                  <span className="text-[12.5px] font-medium text-black/55 dark:text-zinc-400">
+                    {autoRenew ? "On" : "Off"}
+                  </span>
+                </div>
+              </MetaCell>
+              <MetaCell label="Features">
+                <span className="tabular-nums">
+                  {includedCount}
+                  <span className="font-normal text-black/40 dark:text-zinc-500">
+                    {" "}
+                    of {featureTotal} included
+                  </span>
+                </span>
+              </MetaCell>
+            </div>
           </>
         )}
-      </div>
+      </section>
 
       {!loading && data ? (
-        <div className="overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
-          <div className="border-b border-[#F0F0F0] px-4 py-3.5 sm:px-5 dark:border-white/10">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
-              Features included
+        <section className="overflow-hidden rounded-[22px] border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#F0F0F0] px-5 py-4 sm:px-6 dark:border-white/10">
+            <div className="min-w-0">
+              <h3 className="text-[15px] font-semibold tracking-tight text-black dark:text-zinc-50">
+                Features included
+              </h3>
+              <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
+                On your {planName} plan · locked items unlock with an upgrade
+              </p>
             </div>
-            <p className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
-              Included on your {planName} plan · greyed items need an upgrade
-            </p>
+            <span className="rounded-md bg-[#F0FDFA] px-2 py-1 text-[11px] font-semibold tabular-nums text-[#0F766E] dark:bg-[#0F766E]/20 dark:text-[#5EEAD4]">
+              {includedCount}/{featureTotal}
+            </span>
           </div>
-          <ul className="grid grid-cols-1 gap-1.5 p-3 sm:grid-cols-2 sm:p-4">
+          <ul className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 sm:gap-2.5 sm:p-4">
             {PLAN_FEATURE_ITEMS.map((feature) => {
               const on = Boolean(data.planFlags[feature.key]);
               return (
                 <li
                   key={feature.key}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-xl px-3 py-2",
-                    on ? "bg-[#F0FDFA] dark:bg-[#0F766E]/15" : "bg-[#F4F4F5] dark:bg-white/5",
+                    "flex items-center gap-2.5 rounded-xl px-3 py-2 sm:gap-3 sm:px-3.5 sm:py-2.5",
+                    on
+                      ? "bg-[#F0FDFA]/80 ring-1 ring-[#99F6E4]/50 dark:bg-[#0F766E]/15 dark:ring-[#0F766E]/30"
+                      : "bg-[#F7F7F8] ring-1 ring-transparent dark:bg-white/[0.04]",
                   )}
                 >
-                  <Check
-                    className={cn(
-                      "h-3.5 w-3.5 shrink-0",
-                      on ? "text-[#0F766E]" : "text-black/25 dark:text-zinc-600",
-                    )}
-                    strokeWidth={2.5}
-                    aria-hidden
-                  />
                   <span
                     className={cn(
-                      "truncate text-[12.5px]",
+                      "grid h-7 w-7 shrink-0 place-items-center rounded-lg",
+                      on
+                        ? "bg-[#0F766E] text-white"
+                        : "bg-white text-black/30 ring-1 ring-[#E5E5E5] dark:bg-zinc-800 dark:text-zinc-500 dark:ring-white/10",
+                    )}
+                  >
+                    {on ? (
+                      <Check className="h-3.5 w-3.5" strokeWidth={2.75} aria-hidden />
+                    ) : (
+                      <Lock className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-[13px]",
                       on
                         ? "font-medium text-black dark:text-zinc-50"
                         : "text-black/40 dark:text-zinc-500",
@@ -711,24 +769,44 @@ export function TenantSubscriptionPanel({
                     {feature.label}
                   </span>
                   {!on ? (
-                    <span className="ml-auto shrink-0 text-[10px] font-semibold uppercase tracking-wider text-black/30 dark:text-zinc-600">
+                    <span className="hidden shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-black/28 sm:inline dark:text-zinc-600">
                       Locked
                     </span>
                   ) : null}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-7 shrink-0 rounded-lg px-2 text-[11.5px] font-semibold",
+                      on
+                        ? "text-[#0F766E] hover:bg-[#CCFBF1]/70 hover:text-[#0F766E]"
+                        : "text-black/45 hover:bg-black/5 hover:text-black/70 dark:text-zinc-400 dark:hover:bg-white/10",
+                    )}
+                    onClick={() =>
+                      setFeatureDetail({
+                        key: feature.key,
+                        label: feature.label,
+                        included: on,
+                      })
+                    }
+                  >
+                    Details
+                  </Button>
                 </li>
               );
             })}
           </ul>
-        </div>
+        </section>
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
-        <div className="flex items-start justify-between gap-3 border-b border-[#F0F0F0] px-4 py-3.5 sm:px-5 dark:border-white/10">
+      <section className="overflow-hidden rounded-[22px] border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
+        <div className="flex items-start justify-between gap-3 border-b border-[#F0F0F0] px-5 py-4 sm:px-6 dark:border-white/10">
           <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+            <h3 className="text-[15px] font-semibold tracking-tight text-black dark:text-zinc-50">
               Invoices & receipts
-            </div>
-            <p className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
+            </h3>
+            <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
               Platform subscription documents for {schoolLabel}
             </p>
           </div>
@@ -737,7 +815,7 @@ export function TenantSubscriptionPanel({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 shrink-0 rounded-lg px-2 text-[12px] text-black/55 hover:text-black dark:text-zinc-400"
+              className="h-8 shrink-0 rounded-lg px-2 text-[12.5px] font-medium text-black/55 hover:text-black dark:text-zinc-400"
               onClick={() => setDocsOpen(true)}
             >
               View all
@@ -764,9 +842,9 @@ export function TenantSubscriptionPanel({
             ))}
           </ul>
         )}
-      </div>
+      </section>
 
-      <p className="text-[12px] text-black/40 dark:text-zinc-500">
+      <p className="px-1 text-[12px] leading-relaxed text-black/40 dark:text-zinc-500">
         Auto-renewal is a reminder preference only. Online auto-charge is not enabled yet.
       </p>
     </div>

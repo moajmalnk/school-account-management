@@ -330,6 +330,7 @@ import {
   studentHasProtectedHistory,
 } from "@/lib/student-lifecycle";
 import { SettingsUsersCard } from "@/components/school/SettingsUsersCard";
+import { SettingsBackupPanel } from "@/components/school/SettingsBackupPanel";
 import {
   AddFeeCategoryDialog,
   type AddFeeCategoryFormValue,
@@ -16835,7 +16836,7 @@ export function SchoolSettings() {
 
   const allSettingsTabs: { id: SettingsTabId; label: string }[] = useMemo(
     () => [
-      { id: "school", label: "School Details" },
+      { id: "school", label: "School" },
       { id: "branches", label: "Branches" },
       { id: "classes", label: "Class Tier" },
       { id: "academics", label: "Academics" },
@@ -16845,6 +16846,7 @@ export function SchoolSettings() {
       { id: "subscription", label: "Subscription" },
       { id: "transport", label: "Bus Point" },
       { id: "system", label: "System" },
+      { id: "backup", label: "Backup" },
       { id: "support", label: "Support" },
     ],
     [],
@@ -17177,6 +17179,8 @@ export function SchoolSettings() {
         ) : (
           <TenantSystemSkeleton />
         ))}
+
+      {activeTab === "backup" && <SettingsBackupPanel />}
 
       {activeTab === "support" && (
         <CustomerSupportCard onBackToSettings={backToMenu} pinToViewport={pinSupport} />
