@@ -140,6 +140,8 @@ export default defineConfig(({ mode }) => {
             /^\/version\.json$/,
             /^\/sw\.js$/,
             /^\/workbox-.*\.js$/,
+            /^\/robots\.txt$/,
+            /^\/sitemap\.xml$/,
           ],
           runtimeCaching: [
             {
