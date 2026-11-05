@@ -2,3 +2,5 @@ User-agent: *
 Allow: /
 
 Sitemap: https://www.feezo.app/sitemap.xml
+
+# https://www.feezo.app/llms.txt

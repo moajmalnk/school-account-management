@@ -142,6 +142,8 @@ export default defineConfig(({ mode }) => {
             /^\/workbox-.*\.js$/,
             /^\/robots\.txt$/,
             /^\/sitemap\.xml$/,
+            /^\/llms\.txt$/,
+            /^\/llm\.txt$/,
           ],
           runtimeCaching: [
             {
