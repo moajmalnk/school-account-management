@@ -1,27 +1,54 @@
-import { lazy, Suspense, useEffect } from "react";
+import { Component, lazy, Suspense, useEffect, type ReactNode } from "react";
 
 import { MarketingShell } from "@/components/marketing/MarketingShell";
 import { Hero } from "@/components/marketing/sections/Hero";
+import { importWithRetry } from "@/lib/lazy-with-retry";
 import { MARKETING } from "@/lib/marketing-content";
 import { preloadMarketingSections, scrollToMarketingSection } from "@/lib/marketing-scroll";
 
 const HowItWorks = lazy(() =>
-  import("@/components/marketing/sections/HowItWorks").then((m) => ({ default: m.HowItWorks })),
+  importWithRetry(() =>
+    import("@/components/marketing/sections/HowItWorks").then((m) => ({ default: m.HowItWorks })),
+  ),
 );
 const Features = lazy(() =>
-  import("@/components/marketing/sections/Features").then((m) => ({ default: m.Features })),
+  importWithRetry(() =>
+    import("@/components/marketing/sections/Features").then((m) => ({ default: m.Features })),
+  ),
 );
 const DigitalTransformation = lazy(() =>
-  import("@/components/marketing/sections/DigitalTransformation").then((m) => ({
-    default: m.DigitalTransformation,
-  })),
+  importWithRetry(() =>
+    import("@/components/marketing/sections/DigitalTransformation").then((m) => ({
+      default: m.DigitalTransformation,
+    })),
+  ),
 );
 const Testimonials = lazy(() =>
-  import("@/components/marketing/sections/Testimonials").then((m) => ({ default: m.Testimonials })),
+  importWithRetry(() =>
+    import("@/components/marketing/sections/Testimonials").then((m) => ({
+      default: m.Testimonials,
+    })),
+  ),
 );
 const Pricing = lazy(() =>
-  import("@/components/marketing/sections/Pricing").then((m) => ({ default: m.Pricing })),
+  importWithRetry(() =>
+    import("@/components/marketing/sections/Pricing").then((m) => ({ default: m.Pricing })),
+  ),
 );
+
+/** A failed below-the-fold chunk must not replace the whole landing page. */
+class QuietSection extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  render() {
+    if (this.state.failed) return null;
+    return this.props.children;
+  }
+}
 
 export function MarketingLanding() {
   useEffect(() => {
@@ -41,13 +68,31 @@ export function MarketingLanding() {
   return (
     <MarketingShell>
       <Hero />
-      <Suspense fallback={null}>
-        <HowItWorks />
-        <DigitalTransformation />
-        <Features />
-        <Testimonials />
-        <Pricing />
-      </Suspense>
+      <QuietSection>
+        <Suspense fallback={null}>
+          <HowItWorks />
+        </Suspense>
+      </QuietSection>
+      <QuietSection>
+        <Suspense fallback={null}>
+          <DigitalTransformation />
+        </Suspense>
+      </QuietSection>
+      <QuietSection>
+        <Suspense fallback={null}>
+          <Features />
+        </Suspense>
+      </QuietSection>
+      <QuietSection>
+        <Suspense fallback={null}>
+          <Testimonials />
+        </Suspense>
+      </QuietSection>
+      <QuietSection>
+        <Suspense fallback={null}>
+          <Pricing />
+        </Suspense>
+      </QuietSection>
     </MarketingShell>
   );
 }

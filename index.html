@@ -53,6 +53,47 @@
   </head>
   <body class="bg-white antialiased">
     <div id="root"></div>
+    <noscript>
+      <main>
+        <h1>Feezo · School accounts simplified</h1>
+        <p>
+          Fees, receipts, follow-ups, and school accounts in one place. Feezo is a mini ERP for
+          schools, operated by MAC ADZ in Malappuram, Kerala.
+        </p>
+        <p>
+          <a href="/signup/school">Start a 14-day trial</a>
+          ·
+          <a href="/contact">Contact</a>
+          ·
+          <a href="/download">Download the app</a>
+        </p>
+      </main>
+    </noscript>
+    <script>
+      (function () {
+        var ua = navigator.userAgent || "";
+        if (!/googlebot|google-inspectiontool|adsbot-google|bingbot|duckduckbot|baiduspider|yandex|slurp/i.test(ua)) {
+          return;
+        }
+        if (!("serviceWorker" in navigator)) return;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          if (!regs.length) return;
+          return Promise.all(
+            regs.map(function (reg) {
+              return reg.unregister();
+            }),
+          ).then(function () {
+            try {
+              if (sessionStorage.getItem("feezo-bot-sw-cleared")) return;
+              sessionStorage.setItem("feezo-bot-sw-cleared", "1");
+            } catch (e) {
+              return;
+            }
+            location.reload();
+          });
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

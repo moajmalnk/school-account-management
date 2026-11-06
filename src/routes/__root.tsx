@@ -3,6 +3,10 @@ import { Outlet, Link, createRootRouteWithContext, useRouter } from "@tanstack/r
 import { useEffect } from "react";
 
 import { DashboardPwaPrompts } from "@/components/pwa/DashboardPwaPrompts";
+import {
+  isPublicIndexablePath,
+  PublicPageFallback,
+} from "@/components/seo/PublicPageFallback";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
 import { LocaleProvider } from "@/lib/locale/LocaleProvider";
@@ -48,6 +52,25 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   useStoredColorScheme();
   console.error(error);
   const router = useRouter();
+  const pathname = typeof window === "undefined" ? "/" : window.location.pathname;
+  const isPublic = isPublicIndexablePath(pathname);
+
+  useEffect(() => {
+    if (!isPublic) return;
+    try {
+      const key = `feezo-public-retry:${pathname}`;
+      if (window.sessionStorage.getItem(key)) return;
+      window.sessionStorage.setItem(key, "1");
+    } catch {
+      return;
+    }
+    router.invalidate();
+    reset();
+  }, [isPublic, pathname, reset, router]);
+
+  if (isPublic) {
+    return <PublicPageFallback pathname={pathname} />;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-100 px-4 dark:bg-zinc-950">

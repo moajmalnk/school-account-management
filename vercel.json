@@ -78,7 +78,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/|manifest\\.webmanifest|version\\.json|sw\\.js|workbox-|robots\\.txt|sitemap\\.xml|llms\\.txt|llm\\.txt).*)",
+      "source": "/((?!api/|assets/|manifest\\.webmanifest|version\\.json|sw\\.js|workbox-|robots\\.txt|sitemap\\.xml|llms\\.txt|llm\\.txt|.*\\.(?:js|mjs|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|mp4|webmanifest|txt|xml|json|pdf)$).*)",
       "destination": "/index.html"
     }
   ]

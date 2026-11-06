@@ -52,7 +52,7 @@ export function handleMarketingSectionClick(
   onAfterNavigate?.();
 
   if (sectionId === "product") {
-    void import("@/components/marketing/sections/DigitalTransformation");
+    void import("@/components/marketing/sections/DigitalTransformation").catch(() => undefined);
   }
 
   if (!isMarketingHomePath()) {
@@ -68,9 +68,12 @@ export function handleMarketingSectionClick(
 
 /** Warm lazy marketing sections so anchor links resolve quickly. */
 export function preloadMarketingSections(): void {
-  void import("@/components/marketing/sections/HowItWorks");
-  void import("@/components/marketing/sections/Features");
-  void import("@/components/marketing/sections/DigitalTransformation");
-  void import("@/components/marketing/sections/Testimonials");
-  void import("@/components/marketing/sections/Pricing");
+  const warm = (factory: () => Promise<unknown>) => {
+    void factory().catch(() => undefined);
+  };
+  warm(() => import("@/components/marketing/sections/HowItWorks"));
+  warm(() => import("@/components/marketing/sections/Features"));
+  warm(() => import("@/components/marketing/sections/DigitalTransformation"));
+  warm(() => import("@/components/marketing/sections/Testimonials"));
+  warm(() => import("@/components/marketing/sections/Pricing"));
 }

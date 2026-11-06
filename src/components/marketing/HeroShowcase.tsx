@@ -117,6 +117,14 @@ function sampleRingColor(
   }
 }
 
+/** Search renderers should keep the poster instead of the multi-megabyte hero video. */
+function isSearchCrawler(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /googlebot|google-inspectiontool|adsbot-google|storebot-google|bingbot|duckduckbot|baiduspider|yandex|slurp|crawler|spider/i.test(
+    navigator.userAgent,
+  );
+}
+
 function prefersLightData(): boolean {
   if (typeof navigator === "undefined") return false;
   const conn = (
@@ -200,7 +208,7 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
   const [failed, setFailed] = useState(false);
   const [inView, setInView] = useState(true);
   const [pageVisible, setPageVisible] = useState(true);
-  const [enabled] = useState(() => !prefersLightData());
+  const [enabled] = useState(() => !prefersLightData() && !isSearchCrawler());
   const [returning] = useState(hasCachedCookie);
   const bufferTimer = useRef<number | undefined>(undefined);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -334,7 +342,7 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
             loop
             playsInline
             autoPlay={false}
-            preload="auto"
+            preload="metadata"
             disablePictureInPicture
             disableRemotePlayback
             aria-hidden

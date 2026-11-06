@@ -131,10 +131,11 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
-          globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,webp}"],
+          globPatterns: ["**/*.{js,css,html,ico,svg,woff2,webp}", "icons/**/*.png"],
           navigateFallback: "/index.html",
           navigateFallbackDenylist: [
             /^\/api\//,
+            /^\/assets\//,
             /^\/manifest\.webmanifest$/,
             /^\/family\.webmanifest$/,
             /^\/version\.json$/,
@@ -144,6 +145,7 @@ export default defineConfig(({ mode }) => {
             /^\/sitemap\.xml$/,
             /^\/llms\.txt$/,
             /^\/llm\.txt$/,
+            /\.(?:js|mjs|css|png|jpe?g|gif|webp|svg|ico|woff2?|mp4|webmanifest|txt|xml|json|pdf)$/,
           ],
           runtimeCaching: [
             {
