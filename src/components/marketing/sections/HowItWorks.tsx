@@ -243,9 +243,9 @@ function ShowcaseStrip() {
         <div className="w-[12vw] shrink-0 sm:w-[18vw]" aria-hidden />
       </div>
 
-      {/* Page dots — one per screenshot, synced to scroll */}
+      {/* Page dots — 48×48 touch targets; visual dots stay small inside */}
       <div
-        className="mt-7 flex items-center justify-center gap-2"
+        className="mt-5 flex items-center justify-center gap-1"
         role="tablist"
         aria-label="Screenshot pages"
       >
@@ -260,16 +260,16 @@ function ShowcaseStrip() {
               aria-label={`${i + 1} of ${total}: ${item.eyebrow}`}
               onClick={() => scrollToIndex(i)}
               className={cn(
-                "inline-flex h-6 min-w-6 items-center justify-center rounded-full p-2 transition-colors duration-300 ease-out",
-                isActive ? "bg-[rgba(107,168,50,0.14)]" : "hover:bg-[rgba(26,28,44,0.06)]",
+                "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors duration-300 ease-out",
+                isActive ? "bg-[rgba(63,122,31,0.12)]" : "hover:bg-[rgba(26,28,44,0.06)]",
               )}
             >
               <span
                 className={cn(
                   "rounded-full transition-all duration-300 ease-out",
                   isActive
-                    ? "h-2 w-6 bg-[var(--mkt-green-deep)]"
-                    : "h-2 w-2 bg-[var(--mkt-ink)]/25",
+                    ? "h-2.5 w-7 bg-[var(--mkt-green-deep)]"
+                    : "h-2.5 w-2.5 bg-[var(--mkt-ink)]/35",
                 )}
                 aria-hidden
               />
