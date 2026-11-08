@@ -10620,6 +10620,8 @@ function ReceiptDetailsDialog({
                     ],
                     ["Payment mode", payment.mode],
                     ["Payer type", payment.payerType === "external" ? "External" : "Student"],
+                    ["Address", payment.payerAddress || "—"],
+                    ["Contact Number", payment.payerPhone || "—"],
                     ["Academic year", academicYear],
                   ].map(([label, value]) => (
                     <div
@@ -10669,7 +10671,7 @@ function ReceiptDetailsDialog({
                 {parseStoredReceiptNarration(payment.narration).note && (
                   <div className="rounded-xl border border-slate-100 bg-white p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
-                      Narration
+                      Notes
                     </div>
                     <p className="mt-1.5 text-[12.5px] leading-relaxed text-black/65 dark:text-zinc-300">
                       {parseStoredReceiptNarration(payment.narration).note}
@@ -10948,6 +10950,8 @@ function ReceivePayment() {
   const [bankSplitAmount, setBankSplitAmount] = useState("");
   const [cashSplitAmount, setCashSplitAmount] = useState("");
   const [narration, setNarration] = useState("");
+  const [payerAddress, setPayerAddress] = useState("");
+  const [payerPhone, setPayerPhone] = useState("");
   const [receiptTime, setReceiptTime] = useState(() => formatReceiptDateTimeNow());
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
   const [historyQuery, setHistoryQuery] = useState("");
@@ -12253,6 +12257,8 @@ function ReceivePayment() {
     setExternalAmount("");
     setLedgerCategory(ledgerDefault);
     setNarration("");
+    setPayerAddress("");
+    setPayerPhone("");
     setReceiptTime(formatReceiptDateTimeNow());
     setAttachments([]);
     setBankSplitAmount("");
@@ -12292,6 +12298,8 @@ function ReceivePayment() {
     setMode(payment.mode || "Bank");
     setReceiptTime(receiptTimeForForm(payment.time));
     setNarration(parsed.note);
+    setPayerAddress(payment.payerAddress ?? "");
+    setPayerPhone(payment.payerPhone ?? "");
     setAttachments(payment.attachments ? [...payment.attachments] : []);
     setBankSplitAmount(payment.mode === "Both" ? parsed.bankSplit : "");
     setCashSplitAmount(payment.mode === "Both" ? parsed.cashSplit : "");
@@ -12307,6 +12315,19 @@ function ReceivePayment() {
         cls;
       setCls(className);
       setStu(payment.name);
+      const matchedStudent =
+        students.find(
+          (s) =>
+            s.name.trim().toLowerCase() === payment.name.trim().toLowerCase() &&
+            (!className || s.cls === className),
+        ) ||
+        students.find((s) => s.name.trim().toLowerCase() === payment.name.trim().toLowerCase());
+      if (!payment.payerAddress && matchedStudent?.address) {
+        setPayerAddress(matchedStudent.address);
+      }
+      if (!payment.payerPhone && matchedStudent?.phone) {
+        setPayerPhone(matchedStudent.phone);
+      }
       const storedLines = resolvePaymentFeeLines(payment);
       const lines = storedLines.length
         ? storedLines.map((line) =>
@@ -12439,6 +12460,8 @@ function ReceivePayment() {
       ? resolvePaymentFeePeriod(editingPayment) || currentFeeMonth()
       : paymentPeriodLabelFromItems(filledFeeItems);
     const feeLines = !isExternal ? buildPaymentFeeLines(filledFeeItems) : undefined;
+    const address = payerAddress.trim();
+    const phone = payerPhone.trim();
     const nextPayment: Payment = {
       ...editingPayment,
       name: isExternal ? externalPayer.trim() : (selected?.name ?? stu.trim()),
@@ -12454,6 +12477,8 @@ function ReceivePayment() {
       className: isExternal ? undefined : (selected?.cls ?? editingPayment.className ?? cls),
       ...(feeLines?.length ? { feeLines } : { feeLines: undefined }),
       ...(note ? { narration: note } : { narration: undefined }),
+      ...(address ? { payerAddress: address } : { payerAddress: undefined }),
+      ...(phone ? { payerPhone: phone } : { payerPhone: undefined }),
       ...(receiptAttachments ? { attachments: receiptAttachments } : { attachments: undefined }),
     };
 
@@ -12547,6 +12572,8 @@ function ReceivePayment() {
         return;
       }
       const periodLabel = currentFeeMonth();
+      const address = payerAddress.trim();
+      const phone = payerPhone.trim();
       const draft: Payment = {
         id: "",
         name: payer,
@@ -12560,6 +12587,8 @@ function ReceivePayment() {
         feeMonth: periodLabel,
         payerType: "external",
         ...(note ? { narration: note } : {}),
+        ...(address ? { payerAddress: address } : {}),
+        ...(phone ? { payerPhone: phone } : {}),
         ...(receiptAttachments ? { attachments: receiptAttachments } : {}),
       };
       setSavingReceipt(true);
@@ -12576,6 +12605,8 @@ function ReceivePayment() {
         setExternalAmount("");
         setExternalPayer("");
         setNarration("");
+        setPayerAddress("");
+        setPayerPhone("");
         setReceiptTime(formatReceiptDateTimeNow());
         setAttachments([]);
         setBankSplitAmount("");
@@ -12618,6 +12649,8 @@ function ReceivePayment() {
     }
     const periodLabel = paymentPeriodLabelFromItems(filledFeeItems);
     const feeLines = buildPaymentFeeLines(filledFeeItems);
+    const address = payerAddress.trim() || selected.address?.trim() || "";
+    const phone = payerPhone.trim() || selected.phone?.trim() || "";
     const draft: Payment = {
       id: "",
       name: selected.name,
@@ -12633,6 +12666,8 @@ function ReceivePayment() {
       className: selected.cls,
       feeLines,
       ...(note ? { narration: note } : {}),
+      ...(address ? { payerAddress: address } : {}),
+      ...(phone ? { payerPhone: phone } : {}),
       ...(receiptAttachments ? { attachments: receiptAttachments } : {}),
     };
     setSavingReceipt(true);
@@ -12683,6 +12718,8 @@ function ReceivePayment() {
       );
       setFeeItems([createFeeLineItem({ description: defaultCategory, ...resetPeriod })]);
       setNarration("");
+      setPayerAddress(selected.address?.trim() || "");
+      setPayerPhone(selected.phone?.trim() || "");
       setReceiptTime(formatReceiptDateTimeNow());
       setAttachments([]);
       setBankSplitAmount("");
@@ -13117,11 +13154,30 @@ function ReceivePayment() {
               <>
                 <div className="col-span-12 grid grid-cols-12 gap-x-4 gap-y-5 lg:col-span-6 lg:grid-cols-1 lg:gap-y-5">
                   <div className="col-span-12">
-                    <FieldLabel>Donor / payer</FieldLabel>
+                    <FieldLabel>Payer Name</FieldLabel>
                     <Input
                       value={externalPayer}
                       onChange={(e) => setExternalPayer(e.target.value)}
                       placeholder="e.g. Parent Association · Ravi Kumar"
+                      className="h-11 sm:h-10"
+                    />
+                  </div>
+                  <div className="col-span-12">
+                    <FieldLabel>Address</FieldLabel>
+                    <Input
+                      value={payerAddress}
+                      onChange={(e) => setPayerAddress(e.target.value)}
+                      placeholder="House / street / place"
+                      className="h-11 sm:h-10"
+                    />
+                  </div>
+                  <div className="col-span-12">
+                    <FieldLabel>Contact Number</FieldLabel>
+                    <Input
+                      value={payerPhone}
+                      onChange={(e) => setPayerPhone(e.target.value)}
+                      placeholder="Phone number"
+                      inputMode="tel"
                       className="h-11 sm:h-10"
                     />
                   </div>
@@ -13136,12 +13192,12 @@ function ReceivePayment() {
                     />
                   </div>
                   <div className="col-span-12 flex flex-col">
-                    <FieldLabel>Narration</FieldLabel>
+                    <FieldLabel>Notes</FieldLabel>
                     <Textarea
                       value={narration}
                       onChange={(e) => setNarration(e.target.value)}
                       placeholder="Optional note · purpose, reference, or remarks"
-                      className="min-h-[140px] w-full flex-1 resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px]"
+                      className="min-h-[120px] w-full flex-1 resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px]"
                     />
                   </div>
                 </div>
@@ -13159,6 +13215,10 @@ function ReceivePayment() {
                       onAddNew={() => openAddCategoryDialog({ type: "ledger" })}
                       addNewLabel="Create new ledger"
                     />
+                  </div>
+                  <div className="col-span-12">
+                    <FieldLabel>Date / Time</FieldLabel>
+                    <ReceiptDateTimePicker value={receiptTime} onChange={setReceiptTime} />
                   </div>
                   <div className="col-span-12">
                     <PaymentModeControls
@@ -13251,6 +13311,8 @@ function ReceivePayment() {
                           a.name.localeCompare(b.name, "en", { sensitivity: "base" }),
                         )[0];
                       setStu(first?.name ?? "");
+                      setPayerAddress(first?.address?.trim() || "");
+                      setPayerPhone(first?.phone?.trim() || "");
                     }}
                     options={classOptions.map((c) => ({ value: c, label: c }))}
                     placeholder="Select class"
@@ -13264,7 +13326,17 @@ function ReceivePayment() {
                   <FieldLabel>Student</FieldLabel>
                   <FieldSelect
                     value={stu}
-                    onValueChange={setStu}
+                    onValueChange={(next) => {
+                      setStu(next);
+                      if (editingPayment) return;
+                      const match = students.find(
+                        (s) =>
+                          s.name === next &&
+                          (!cls || studentBelongsToClass(s.cls, cls)),
+                      );
+                      setPayerAddress(match?.address?.trim() || "");
+                      setPayerPhone(match?.phone?.trim() || "");
+                    }}
                     options={studentOptions}
                     placeholder={
                       !cls
@@ -13277,6 +13349,26 @@ function ReceivePayment() {
                     searchable
                     searchPlaceholder="Search student..."
                     triggerClassName="h-11 sm:h-10"
+                  />
+                </div>
+
+                <div className="col-span-12 sm:col-span-6">
+                  <FieldLabel>Address</FieldLabel>
+                  <Input
+                    value={payerAddress}
+                    onChange={(e) => setPayerAddress(e.target.value)}
+                    placeholder="House / street / place"
+                    className="h-11 sm:h-10"
+                  />
+                </div>
+                <div className="col-span-12 sm:col-span-6">
+                  <FieldLabel>Contact Number</FieldLabel>
+                  <Input
+                    value={payerPhone}
+                    onChange={(e) => setPayerPhone(e.target.value)}
+                    placeholder="Phone number"
+                    inputMode="tel"
+                    className="h-11 sm:h-10"
                   />
                 </div>
 
@@ -13514,7 +13606,7 @@ function ReceivePayment() {
                 </div>
 
                 <div className="col-span-12 flex flex-col lg:col-span-7">
-                  <FieldLabel>Narration</FieldLabel>
+                  <FieldLabel>Notes</FieldLabel>
                   <Textarea
                     value={narration}
                     onChange={(e) => setNarration(e.target.value)}

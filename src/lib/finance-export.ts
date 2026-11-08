@@ -973,6 +973,29 @@ function canvasPng(img: HTMLImageElement, maxDim = 960) {
   return { dataUrl: canvas.toDataURL("image/png"), width, height };
 }
 
+/** Flatten transparent seal/signature PNGs onto white so jsPDF soft-masks don't draw grey boxes. */
+async function flattenPdfLogoOnWhite(logo: PdfLogo | null): Promise<PdfLogo | null> {
+  if (!logo) return null;
+  try {
+    const img = await loadHtmlImage(logo.dataUrl);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, logo.width);
+    canvas.height = Math.max(1, logo.height);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return logo;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return {
+      dataUrl: canvas.toDataURL("image/png"),
+      width: canvas.width,
+      height: canvas.height,
+    };
+  } catch {
+    return logo;
+  }
+}
+
 async function fetchLogoAsPng(src: string, maxDim = 960) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), 6000);
@@ -1181,7 +1204,6 @@ async function createReceiptPdf(
   const generatedAt = formatNow();
   const issuedAt = formatReceiptIssuedAt(payment.time, generatedAt);
   const amountFormatted = formatMoneyPdf(payment.amount);
-  const isExternal = payment.payerType === "external";
   const displayName = pdfSafe(schoolName || "School");
 
   doc.setFillColor(...receiptInk().white);
@@ -1210,21 +1232,10 @@ async function createReceiptPdf(
     doc.text(pdfSafe(academicYear), pageWidth / 2, barY + 14.2, { align: "center" });
     metaTop = barY + 20;
   }
-  const labelWidth = 30;
+  const labelWidth = 34;
   const valueX = margin + labelWidth;
   const leftMax = contentWidth * 0.52 - labelWidth;
-  const metaRows: [string, string][] = isExternal
-    ? [
-        ["Payer Name", pdfSafe(payment.name)],
-        ["Payer Type", "External"],
-        ["Contact", pdfSafe(branding?.studentContact || "—")],
-      ]
-    : [
-        ["Student Name", pdfSafe(payment.name)],
-        ["Class & Div", pdfSafe(payment.className || "—")],
-        ["Contact", pdfSafe(branding?.studentContact || "—")],
-        ["Place", pdfSafe(branding?.studentPlace || "—")],
-      ];
+  const metaRows = receiptPayerMetaRows(payment, branding);
 
   let metaY = metaTop;
   for (const [label, value] of metaRows) {
@@ -1324,16 +1335,7 @@ async function createReceiptPdf(
   doc.setFontSize(11);
   doc.text(amountFormatted, boxX + boxW - 4, boxY + 7.2, { align: "right" });
 
-  const note = receiptNarrationNote(payment);
-  let afterY = Math.max(boxY + boxH, boxY + wordLines.length * 4.2) + 10;
-  if (note) {
-    doc.setFont(pdfFontName(), "italic");
-    doc.setFontSize(8);
-    doc.setTextColor(...receiptInk().muted);
-    const noteLines = doc.splitTextToSize(`Note: ${note}`, contentWidth) as string[];
-    doc.text(noteLines, margin, afterY);
-    afterY += noteLines.length * 4 + 6;
-  }
+  const afterY = Math.max(boxY + boxH, boxY + wordLines.length * 4.2) + 10;
 
   await drawSealFooter(
     doc,
@@ -1360,6 +1362,39 @@ function receiptNarrationNote(payment: Payment): string {
     )
     .replace(/^[·|\s]+|[·|\s]+$/g, "")
     .trim();
+}
+
+function receiptPayerMetaRows(
+  payment: Payment,
+  branding?: ReceiptBranding,
+): [string, string][] {
+  const isExternal = payment.payerType === "external";
+  const address =
+    pdfSafe(payment.payerAddress || "") || pdfSafe(branding?.studentPlace || "") || "—";
+  const contact =
+    pdfSafe(payment.payerPhone || "") || pdfSafe(branding?.studentContact || "") || "—";
+  const notes = receiptNarrationNote(payment);
+
+  const rows: [string, string][] = isExternal
+    ? [
+        ["Payer Name", pdfSafe(payment.name)],
+        ["Address", address],
+        ["Contact Number", contact],
+      ]
+    : [
+        ["Student Name", pdfSafe(payment.name)],
+        ["Class & Div", pdfSafe(payment.className || "—")],
+        ["Address", address],
+        ["Contact Number", contact],
+      ];
+
+  if (notes) {
+    rows.push(["Notes", notes]);
+  }
+  if (isExternal) {
+    rows.push(["Payer Type", "External"]);
+  }
+  return rows;
 }
 
 function receiptFilename(
@@ -1419,7 +1454,6 @@ function drawA5ReceiptPanel(
   const contentW = frameW - m * 2;
   const centerX = frameX + frameW / 2;
   const displayName = pdfSafe(ctx.schoolName || "School");
-  const isExternal = payment.payerType === "external";
 
   let y = 8;
   if (assets.letterhead) {
@@ -1518,20 +1552,9 @@ function drawA5ReceiptPanel(
   }
 
   const metaTop = y + 4;
-  const labelW = 21;
+  const labelW = 26;
   const leftValueMax = contentW * 0.58 - labelW;
-  const metaRows: [string, string][] = isExternal
-    ? [
-        ["Payer Name", pdfSafe(payment.name)],
-        ["Payer Type", "External"],
-        ["Contact", pdfSafe(branding?.studentContact || "—")],
-      ]
-    : [
-        ["Student Name", pdfSafe(payment.name)],
-        ["Class & Div", pdfSafe(payment.className || "—")],
-        ["Contact", pdfSafe(branding?.studentContact || "—")],
-        ["Place", pdfSafe(branding?.studentPlace || "—")],
-      ];
+  const metaRows = receiptPayerMetaRows(payment, branding);
 
   let metaY = metaTop;
   for (const [label, value] of metaRows) {
@@ -1632,16 +1655,7 @@ function drawA5ReceiptPanel(
   doc.setFontSize(9);
   doc.text(formatMoneyPdf(payment.amount), boxX + boxW - 3, boxY + 5.7, { align: "right" });
 
-  let contentBottom = Math.max(boxY + boxH, boxY + wordLines.length * 2.9) + 2;
-  const note = receiptNarrationNote(payment);
-  if (note) {
-    doc.setFont(pdfFontName(), "italic");
-    doc.setFontSize(6.2);
-    doc.setTextColor(...ink.muted);
-    const noteLines = (doc.splitTextToSize(`Note: ${note}`, contentW) as string[]).slice(0, 2);
-    doc.text(noteLines, left, contentBottom + 3);
-    contentBottom += noteLines.length * 2.8 + 3;
-  }
+  const contentBottom = Math.max(boxY + boxH, boxY + wordLines.length * 2.9) + 2;
 
   const stripH = 2;
   const creditGap = sessionPdfCreditEnabled() ? 3.2 : 0;
@@ -1682,8 +1696,6 @@ function drawA5ReceiptPanel(
   doc.text(signatory ? pdfSafe(signatory) : "Authorized Signatory", right - signW / 2, labelY, {
     align: "center",
   });
-  doc.setFontSize(6);
-  doc.text("School Seal", left + sealSize / 2, labelY, { align: "center" });
 
   doc.setFontSize(5.6);
   doc.text(`Generated ${ctx.generatedAt}`, left, genY);
@@ -2181,15 +2193,18 @@ async function loadSchoolMarkPng(
   width: number,
   height: number,
 ): Promise<PdfLogo | null> {
+  let mark: PdfLogo | null = null;
   if (url?.trim()) {
-    const loaded = await loadLogoForPdf(url);
-    if (loaded) return loaded;
+    mark = await loadLogoForPdf(url);
   }
-  try {
-    return await svgMarkupToPng(fallbackSvg, width, height);
-  } catch {
-    return null;
+  if (!mark) {
+    try {
+      mark = await svgMarkupToPng(fallbackSvg, width, height);
+    } catch {
+      return null;
+    }
   }
+  return flattenPdfLogoOnWhite(mark);
 }
 
 async function loadReceiptSealPng(
@@ -2198,14 +2213,15 @@ async function loadReceiptSealPng(
 ): Promise<PdfLogo | null> {
   if (branding?.sealUrl?.trim()) {
     const custom = await loadLogoForPdf(branding.sealUrl);
-    if (custom) return custom;
+    if (custom) return flattenPdfLogoOnWhite(custom);
   }
   const logo = branding?.logoUrl ? await loadLogoForPdf(branding.logoUrl) : null;
   try {
-    return await defaultSealToPng(schoolName, {
+    const seal = await defaultSealToPng(schoolName, {
       details: branding?.address,
       logoDataUrl: logo?.dataUrl,
     });
+    return flattenPdfLogoOnWhite(seal);
   } catch {
     return null;
   }
@@ -2407,7 +2423,6 @@ async function drawSealFooter(
     { align: "center" },
   );
   doc.setFontSize(useCompact ? 7 : 7.5);
-  doc.text("School Seal", margin + sealSize / 2, labelY, { align: "center" });
   if (!useCompact) {
     doc.text(`Document generated on ${generatedAt}`, margin, labelY + 8);
     doc.text(queryLine.replace("{school}", schoolName), margin, labelY + 12.5);

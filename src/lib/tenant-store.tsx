@@ -1045,6 +1045,10 @@ export type Payment = {
   feeMonth?: string;
   /** Optional free-text note on the receipt */
   narration?: string;
+  /** Payer address shown on the receipt (external donors or overrides) */
+  payerAddress?: string;
+  /** Payer contact number shown on the receipt */
+  payerPhone?: string;
   /** Supporting files · bank slips, UPI screenshots, vouchers */
   attachments?: PaymentAttachment[];
   /** Itemized fee lines when a receipt covers multiple periods or categories */
