@@ -4,7 +4,7 @@ import { RouterProvider } from "@tanstack/react-router";
 
 import { syncClientStateToCurrentBuild } from "@/lib/app-version";
 import { router } from "@/router";
-import { applyWorkspaceThemeMode, peekStoredThemeMode } from "@/lib/tenant-store";
+import { applyWorkspaceThemeMode, peekStoredThemeMode } from "@/lib/workspace-theme";
 
 import "./styles.css";
 

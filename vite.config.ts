@@ -185,8 +185,23 @@ export default defineConfig(({ mode }) => {
       sourcemap: true,
       rollupOptions: {
         output: {
-          manualChunks: {
-            router: ["@tanstack/react-router", "@tanstack/react-query"],
+          manualChunks(id) {
+            if (
+              id.includes("node_modules/@tanstack/react-router") ||
+              id.includes("node_modules/@tanstack/react-query") ||
+              id.includes("node_modules/@tanstack/query-core")
+            ) {
+              return "router";
+            }
+            if (
+              id.includes("node_modules/motion") ||
+              id.includes("node_modules/framer-motion") ||
+              id.includes("node_modules/motion-dom") ||
+              id.includes("node_modules/motion-utils")
+            ) {
+              return "motion";
+            }
+            return undefined;
           },
         },
       },

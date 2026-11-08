@@ -1,26 +1,51 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, Link, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { DashboardPwaPrompts } from "@/components/pwa/DashboardPwaPrompts";
 import {
   isPublicIndexablePath,
   PublicPageFallback,
 } from "@/components/seo/PublicPageFallback";
-import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
 import { LocaleProvider } from "@/lib/locale/LocaleProvider";
 import { OrgCurrencyBridge } from "@/lib/locale/OrgCurrencyBridge";
 import { PwaProvider } from "@/lib/pwa";
 import { installCheckoutReturn } from "@/lib/cashfree-checkout";
-import { applyWorkspaceThemeMode, peekStoredThemeMode } from "@/lib/tenant-store";
+import { applyWorkspaceThemeMode, peekStoredThemeMode } from "@/lib/workspace-theme";
 
 installCheckoutReturn();
+
+const Toaster = lazy(() =>
+  import("@/components/ui/sonner").then((m) => ({ default: m.Toaster })),
+);
 
 function useStoredColorScheme() {
   useEffect(() => {
     applyWorkspaceThemeMode(peekStoredThemeMode());
   }, []);
+}
+
+/** Keep sonner off the marketing LCP/TBT path. */
+function DeferredToaster() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const marketing = Boolean(
+      (window as Window & { __feezoIsMarketingHome?: boolean }).__feezoIsMarketingHome,
+    );
+    if (!marketing) {
+      setReady(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setReady(true), 8000);
+    return () => window.clearTimeout(timer);
+  }, []);
+  if (!ready) return null;
+  return (
+    <Suspense fallback={null}>
+      <Toaster />
+    </Suspense>
+  );
 }
 
 function NotFoundComponent() {
@@ -125,7 +150,7 @@ function RootComponent() {
           <PwaProvider>
             <Outlet />
             <DashboardPwaPrompts />
-            <Toaster />
+            <DeferredToaster />
           </PwaProvider>
         </LocaleProvider>
       </AuthProvider>

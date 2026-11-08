@@ -13,7 +13,7 @@ import {
   normalizePlanFlags,
   type PermissionKey,
 } from "@/lib/permissions";
-import { findTenantUserById, normalizeTenantUser, type TenantUser } from "@/lib/tenant-store";
+import type { TenantUser } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 type ImpersonateSearch = {
@@ -47,6 +47,7 @@ function parseBranchIdsParam(raw: string | undefined): string[] {
 }
 
 async function resolveTenantUserForImpersonate(userId: string): Promise<TenantUser | null> {
+  const { findTenantUserById, normalizeTenantUser } = await import("@/lib/tenant-store");
   const local = findTenantUserById(userId);
   try {
     const list = await apiRequest<unknown[]>("/api/settings/users.php");

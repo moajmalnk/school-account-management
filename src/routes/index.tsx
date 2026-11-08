@@ -1,8 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 
-import { MarketingLanding } from "@/components/marketing/MarketingLanding";
 import { homePathForSession, useAuth } from "@/lib/auth";
+
+const MarketingLanding = lazy(() =>
+  import("@/components/marketing/MarketingLanding").then((m) => ({
+    default: m.MarketingLanding,
+  })),
+);
 
 export const Route = createFileRoute("/")({
   component: IndexPage,
@@ -36,5 +41,10 @@ function IndexPage() {
   }
 
   // Visitors: show the landing page immediately — don't wait on auth API.
-  return <MarketingLanding />;
+  // Boot shell in index.html covers first paint while this chunk loads.
+  return (
+    <Suspense fallback={null}>
+      <MarketingLanding />
+    </Suspense>
+  );
 }

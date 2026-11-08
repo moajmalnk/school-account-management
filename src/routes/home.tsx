@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { lazy, Suspense } from "react";
 
-import { MarketingLanding } from "@/components/marketing/MarketingLanding";
+const MarketingLanding = lazy(() =>
+  import("@/components/marketing/MarketingLanding").then((m) => ({
+    default: m.MarketingLanding,
+  })),
+);
 
 /** Public marketing home — available even when signed in (unlike `/`). */
 export const Route = createFileRoute("/home")({
@@ -8,5 +13,9 @@ export const Route = createFileRoute("/home")({
 });
 
 function HomePage() {
-  return <MarketingLanding />;
+  return (
+    <Suspense fallback={null}>
+      <MarketingLanding />
+    </Suspense>
+  );
 }

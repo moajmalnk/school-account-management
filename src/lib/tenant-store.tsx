@@ -4351,29 +4351,10 @@ export const THEME_NAV_PLACEMENT_OPTIONS: ThemeSettings["navPlacement"][] = [
   "Bottom",
 ];
 
-export function applyWorkspaceThemeMode(mode: ThemeSettings["mode"]) {
-  if (typeof document === "undefined") return;
-  const root = document.documentElement;
-  const dark = mode === "Dark";
-  root.classList.toggle("dark", dark);
-  root.style.colorScheme = dark ? "dark" : "light";
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", dark ? "#0a0a0a" : "#EAEAEA");
-}
-
-export function peekStoredThemeMode(): ThemeSettings["mode"] {
-  if (typeof window === "undefined") return "Light";
-  try {
-    const raw =
-      window.localStorage.getItem(STORAGE_KEY) ??
-      LEGACY_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean);
-    if (!raw) return "Light";
-    const parsed = JSON.parse(raw) as { themeSettings?: { mode?: unknown } };
-    return normalizeThemeMode(parsed.themeSettings?.mode);
-  } catch {
-    return "Light";
-  }
-}
+export {
+  applyWorkspaceThemeMode,
+  peekStoredThemeMode,
+} from "@/lib/workspace-theme";
 
 export function getStoredNavPlacement(): ThemeSettings["navPlacement"] {
   if (typeof window === "undefined") return "Left";

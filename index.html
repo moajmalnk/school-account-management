@@ -100,6 +100,7 @@
             document.head.appendChild(manifest);
           }
         }, 4000);
+        // Marketing home: keep GTM off LCP/TBT; elsewhere load sooner for conversion events.
         afterLoad(function () {
           window.dataLayer = window.dataLayer || [];
           function gtag() {
@@ -111,7 +112,7 @@
           s.async = true;
           s.src = "https://www.googletagmanager.com/gtm.js?id=GTM-P8CZ33ZN";
           document.head.appendChild(s);
-        }, 1500);
+        }, window.__feezoIsMarketingHome ? 8000 : 1500);
       })();
     </script>
   </head>
