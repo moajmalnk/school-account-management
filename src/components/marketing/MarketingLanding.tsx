@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useEffect, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 
 import { MarketingShell } from "@/components/marketing/MarketingShell";
 import { Hero } from "@/components/marketing/sections/Hero";
@@ -50,7 +50,49 @@ class QuietSection extends Component<{ children: ReactNode }, { failed: boolean 
   }
 }
 
+function SectionFallback({ height }: { height: number }) {
+  return <div style={{ minHeight: height }} aria-hidden />;
+}
+
+function BelowFoldSections({ onReady }: { onReady: () => void }) {
+  useEffect(() => {
+    onReady();
+  }, [onReady]);
+
+  return (
+    <>
+      <QuietSection>
+        <Suspense fallback={<SectionFallback height={980} />}>
+          <HowItWorks />
+        </Suspense>
+      </QuietSection>
+      <QuietSection>
+        <Suspense fallback={<SectionFallback height={880} />}>
+          <DigitalTransformation />
+        </Suspense>
+      </QuietSection>
+      <QuietSection>
+        <Suspense fallback={<SectionFallback height={520} />}>
+          <Features />
+        </Suspense>
+      </QuietSection>
+      <QuietSection>
+        <Suspense fallback={<SectionFallback height={560} />}>
+          <Testimonials />
+        </Suspense>
+      </QuietSection>
+      <QuietSection>
+        <Suspense fallback={<SectionFallback height={900} />}>
+          <Pricing />
+        </Suspense>
+      </QuietSection>
+    </>
+  );
+}
+
 export function MarketingLanding() {
+  const [showFooter, setShowFooter] = useState(false);
+
   useEffect(() => {
     document.title = MARKETING.title;
     const meta = document.querySelector('meta[name="description"]');
@@ -70,33 +112,9 @@ export function MarketingLanding() {
   }, []);
 
   return (
-    <MarketingShell>
+    <MarketingShell showFooter={showFooter}>
       <Hero />
-      <QuietSection>
-        <Suspense fallback={null}>
-          <HowItWorks />
-        </Suspense>
-      </QuietSection>
-      <QuietSection>
-        <Suspense fallback={null}>
-          <DigitalTransformation />
-        </Suspense>
-      </QuietSection>
-      <QuietSection>
-        <Suspense fallback={null}>
-          <Features />
-        </Suspense>
-      </QuietSection>
-      <QuietSection>
-        <Suspense fallback={null}>
-          <Testimonials />
-        </Suspense>
-      </QuietSection>
-      <QuietSection>
-        <Suspense fallback={null}>
-          <Pricing />
-        </Suspense>
-      </QuietSection>
+      <BelowFoldSections onReady={() => setShowFooter(true)} />
     </MarketingShell>
   );
 }

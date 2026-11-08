@@ -13,7 +13,14 @@ import { BRAND } from "@/lib/brand";
 import { MARKETING } from "@/lib/marketing-content";
 import { handleMarketingSectionClick } from "@/lib/marketing-scroll";
 
-export function MarketingShell({ children }: { children: ReactNode }) {
+export function MarketingShell({
+  children,
+  showFooter = true,
+}: {
+  children: ReactNode;
+  /** Hide until below-the-fold sections exist so the footer does not jump. */
+  showFooter?: boolean;
+}) {
   const [scrolled, setScrolled] = useState(false);
   const activeSection = useMarketingActiveSection();
 
@@ -104,7 +111,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
       <div className="flex-1 bg-white overflow-x-hidden flex flex-col relative text-[var(--mkt-ink)]">
         <main id="main">{children}</main>
 
-        <MarketingFooter />
+        {showFooter ? <MarketingFooter /> : null}
       </div>
 
       <AppDownloadQr />
