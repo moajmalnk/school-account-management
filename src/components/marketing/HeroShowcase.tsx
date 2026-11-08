@@ -5,7 +5,6 @@ import { easeOutExpo } from "@/components/marketing/motion";
 
 const VIDEO_SRC = "/explode_video.mp4";
 const POSTER_START = "/home/explode-start.webp";
-const POSTER_START_FALLBACK = "/home/explode-start-lcp.jpg";
 const POSTER_START_MOBILE = "/home/explode-start-720.webp";
 
 /** Bump when the video file changes so stale copies are evicted. */
@@ -205,11 +204,8 @@ function whenIdle(fn: () => void): () => void {
 }
 
 /**
- * Hero product shot that loops the "explode" tour continuously. The video is
- * kept in Cache Storage (flagged by a cookie) so repeat visits start instantly
- * without re-downloading. Pauses off-screen / in background tabs, fades to the
- * still frame while buffering, and falls back to the poster for reduced motion,
- * data-saver connections, or playback errors.
+ * Hero product shot. The still WebP is the LCP element. The looping video mounts
+ * only after the load event + a delay so it cannot steal LCP or block first paint.
  */
 export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDelayMs?: number }) {
   const reduce = useReducedMotion();
@@ -222,7 +218,8 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
   const [failed, setFailed] = useState(false);
   const [inView, setInView] = useState(true);
   const [pageVisible, setPageVisible] = useState(true);
-  const [enabled] = useState(() => !prefersPosterOnly() && !isSearchCrawler());
+  /** Always start false — never compete with LCP. */
+  const [enabled, setEnabled] = useState(false);
   const [returning] = useState(hasCachedCookie);
   const bufferTimer = useRef<number | undefined>(undefined);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -235,6 +232,30 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
   };
 
   useEffect(() => () => window.clearTimeout(bufferTimer.current), []);
+
+  // Unlock video only after first paint / LCP window on capable desktop sessions.
+  useEffect(() => {
+    if (reduce || isSearchCrawler() || prefersPosterOnly()) return;
+
+    let cancelled = false;
+    let idleCancel: (() => void) | undefined;
+    const arm = () => {
+      idleCancel = whenIdle(() => {
+        if (cancelled) return;
+        window.setTimeout(() => {
+          if (!cancelled) setEnabled(true);
+        }, 4500);
+      });
+    };
+
+    if (document.readyState === "complete") arm();
+    else window.addEventListener("load", arm, { once: true });
+
+    return () => {
+      cancelled = true;
+      idleCancel?.();
+    };
+  }, [reduce]);
 
   const canPlay = enabled && !reduce && !failed;
 
@@ -353,12 +374,11 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
           <motion.video
             ref={videoRef}
             src={src}
-            poster={POSTER_START_FALLBACK}
             muted
             loop
             playsInline
             autoPlay={false}
-            preload="metadata"
+            preload="none"
             disablePictureInPicture
             disableRemotePlayback
             aria-hidden
