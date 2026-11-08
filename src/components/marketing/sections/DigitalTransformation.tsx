@@ -122,9 +122,9 @@ export function DigitalTransformation() {
                   src="/digital/2-280.webp"
                   srcSet="/digital/2-280.webp 280w, /digital/2-360.webp 360w, /digital/2.webp 540w"
                   alt={FOLLOW_UP.imageAlt}
-                  width={360}
-                  height={490}
-                  sizes="(max-width: 1024px) 270px, 360px"
+                  width={280}
+                  height={381}
+                  sizes="(max-width: 1024px) 270px, 280px"
                   className="h-full w-auto max-h-full max-w-full object-contain object-bottom drop-shadow-[0_14px_32px_rgba(0,0,0,0.14)] lg:object-right-bottom"
                   loading="lazy"
                   decoding="async"

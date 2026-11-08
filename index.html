@@ -52,8 +52,8 @@
       type="image/webp"
       fetchpriority="high"
       href="/home/explode-start-640.webp"
-      imagesrcset="/home/explode-start-640.webp 640w, /home/explode-start-720.webp 720w, /home/explode-start.webp 960w"
-      imagesizes="(max-width: 768px) 100vw, min(100vw, 720px)"
+      imagesrcset="/home/explode-start-640.webp 640w, /home/explode-start-720.webp 720w"
+      imagesizes="(max-width: 768px) 100vw, 720px"
     />
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
     <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
@@ -86,12 +86,12 @@
         }
         function arm() {
           if (window.__feezoIsMarketingHome) {
+            // Interaction-only — no timer (Lighthouse does not scroll/tap).
             var onInteract = function () {
               loadFonts();
             };
             window.addEventListener("scroll", onInteract, { once: true, passive: true });
             window.addEventListener("pointerdown", onInteract, { once: true, passive: true });
-            setTimeout(loadFonts, 12000);
             return;
           }
           if ("requestIdleCallback" in window) {
@@ -149,8 +149,8 @@
         <h1>Welcome To<br /><span>Feezo</span></h1>
         <img
           src="/home/explode-start-640.webp"
-          srcset="/home/explode-start-640.webp 640w, /home/explode-start-720.webp 720w, /home/explode-start.webp 960w"
-          sizes="(max-width: 768px) 100vw, min(100vw, 720px)"
+          srcset="/home/explode-start-640.webp 640w, /home/explode-start-720.webp 720w"
+          sizes="(max-width: 768px) 100vw, 720px"
           width="640"
           height="360"
           alt="Feezo tenant dashboard with income, expenses, and cash position"

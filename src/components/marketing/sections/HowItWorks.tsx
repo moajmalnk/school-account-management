@@ -74,54 +74,19 @@ function ShowcaseStrip() {
   const [active, setActive] = useState(0);
   const activeRef = useRef(0);
   const rafRef = useRef(0);
-  const metricsRef = useRef({ scrollWidth: 0, clientWidth: 0, maxScroll: 0 });
-  const offsetsRef = useRef<number[]>([]);
-  const measureRafRef = useRef(0);
   const total = showcase.items.length;
 
-  const measureScroller = useCallback(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    // One read pass per frame — avoid forced reflow between style invalidation and layout.
-    const scrollWidth = el.scrollWidth;
-    const clientWidth = el.clientWidth;
-    metricsRef.current = {
-      scrollWidth,
-      clientWidth,
-      maxScroll: Math.max(0, scrollWidth - clientWidth),
-    };
-    // Read all geometry in this same frame (scheduled via rAF) — no interleaved writes.
-    offsetsRef.current = Array.from(el.querySelectorAll<HTMLElement>("[data-shot]")).map((card) =>
-      Math.max(0, card.offsetLeft - 20),
-    );
-  }, []);
-
+  /** Only read layout on user scroll/click — never on mount (avoids forced reflow vs motion/IO). */
   const syncEdges = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
-    const { maxScroll } = metricsRef.current;
+    const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
     const scrollLeft = el.scrollLeft;
     const nextPrev = scrollLeft > 6;
     const nextNext = scrollLeft < maxScroll - 6;
     setCanPrev((prev) => (prev === nextPrev ? prev : nextPrev));
     setCanNext((prev) => (prev === nextNext ? prev : nextNext));
-    if (maxScroll > 0 && scrollLeft >= maxScroll - 12) {
-      const last = total - 1;
-      if (activeRef.current !== last) {
-        activeRef.current = last;
-        setActive(last);
-      }
-    }
-  }, [total]);
-
-  const scheduleMeasure = useCallback(() => {
-    if (measureRafRef.current) return;
-    measureRafRef.current = window.requestAnimationFrame(() => {
-      measureRafRef.current = 0;
-      measureScroller();
-      syncEdges();
-    });
-  }, [measureScroller, syncEdges]);
+  }, []);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -135,16 +100,7 @@ function ShowcaseStrip() {
       });
     };
 
-    scheduleMeasure();
     el.addEventListener("scroll", onScroll, { passive: true });
-
-    const ro =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => {
-            scheduleMeasure();
-          })
-        : null;
-    ro?.observe(el);
 
     const cards = Array.from(el.querySelectorAll<HTMLElement>("[data-shot]"));
     const io =
@@ -172,29 +128,28 @@ function ShowcaseStrip() {
 
     return () => {
       el.removeEventListener("scroll", onScroll);
-      ro?.disconnect();
       if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
-      if (measureRafRef.current) window.cancelAnimationFrame(measureRafRef.current);
       io?.disconnect();
     };
-  }, [scheduleMeasure, syncEdges]);
+  }, [syncEdges]);
 
   const scrollToIndex = useCallback(
     (index: number) => {
       const el = scrollerRef.current;
       if (!el) return;
-      const left = offsetsRef.current[index];
-      if (typeof left !== "number") {
-        measureScroller();
-      }
-      el.scrollTo({
-        left: offsetsRef.current[index] ?? 0,
-        behavior: reduce ? "auto" : "smooth",
+      const clamped = Math.max(0, Math.min(total - 1, index));
+      const card = el.querySelector<HTMLElement>(`[data-shot][data-index="${clamped}"]`);
+      window.requestAnimationFrame(() => {
+        el.scrollTo({
+          left: card ? Math.max(0, card.offsetLeft - 20) : 0,
+          behavior: reduce ? "auto" : "smooth",
+        });
+        syncEdges();
       });
-      activeRef.current = index;
-      setActive(index);
+      activeRef.current = clamped;
+      setActive(clamped);
     },
-    [measureScroller, reduce],
+    [reduce, syncEdges, total],
   );
 
   const scrollByCard = (dir: -1 | 1) => {
@@ -249,15 +204,11 @@ function ShowcaseStrip() {
         aria-label="App screenshots"
       >
         {showcase.items.map((item, index) => (
-          <motion.li
+          <li
             key={item.id}
             data-shot
             data-index={index}
             className="mkt-showcase-shot relative shrink-0 snap-start"
-            initial={reduce ? false : { opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-40px" }}
-            transition={{ duration: 0.55, ease: easeOutExpo, delay: Math.min(index, 4) * 0.05 }}
           >
             <figure className="m-0 h-full">
               <div className="h-full overflow-hidden rounded-[1.15rem] bg-white shadow-[0_18px_48px_-28px_rgba(26,28,44,0.45)] ring-1 ring-black/[0.05] sm:rounded-[1.35rem]">
@@ -279,7 +230,7 @@ function ShowcaseStrip() {
                 {item.eyebrow}: {item.headline}
               </figcaption>
             </figure>
-          </motion.li>
+          </li>
         ))}
         {/* End spacer — lets last card snap fully into view */}
         <li className="w-[12vw] shrink-0 list-none sm:w-[18vw]" aria-hidden />

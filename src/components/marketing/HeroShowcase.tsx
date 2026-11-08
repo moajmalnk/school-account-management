@@ -4,7 +4,6 @@ import { motion, useReducedMotion } from "motion/react";
 import { easeOutExpo } from "@/components/marketing/motion";
 
 const VIDEO_SRC = "/explode_video.mp4";
-const POSTER_START = "/home/explode-start.webp";
 const POSTER_START_MID = "/home/explode-start-640.webp";
 const POSTER_START_MOBILE = "/home/explode-start-720.webp";
 
@@ -349,8 +348,8 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
       <div className="absolute inset-0" style={EDGE_FEATHER}>
         <img
           src={POSTER_START_MID}
-          srcSet={`${POSTER_START_MID} 640w, ${POSTER_START_MOBILE} 720w, ${POSTER_START} 960w`}
-          sizes="(max-width: 768px) 100vw, min(100vw, 720px)"
+          srcSet={`${POSTER_START_MID} 640w, ${POSTER_START_MOBILE} 720w`}
+          sizes="(max-width: 768px) 100vw, 720px"
           alt={alt}
           width={640}
           height={360}

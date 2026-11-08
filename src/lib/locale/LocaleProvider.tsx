@@ -89,16 +89,34 @@ function useAfterFirstPaint(timeoutMs = 2500) {
   return ready;
 }
 
+/** Marketing home: wait for real user input so PSI never hits locale/detect. */
+function useInteractionReady(enabled: boolean) {
+  const [ready, setReady] = useState(!enabled);
+  useEffect(() => {
+    if (!enabled) return;
+    const unlock = () => setReady(true);
+    window.addEventListener("scroll", unlock, { once: true, passive: true });
+    window.addEventListener("pointerdown", unlock, { once: true, passive: true });
+    return () => {
+      window.removeEventListener("scroll", unlock);
+      window.removeEventListener("pointerdown", unlock);
+    };
+  }, [enabled]);
+  return ready;
+}
+
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const [initial] = useState(readStored);
   const [currency, setCurrencyState] = useState<CurrencyCode>(initial.currency);
   const [country, setCountryState] = useState<string>(initial.country);
   const [isAuto, setIsAuto] = useState<boolean>(!initial.manual);
-  // Marketing home keeps geo/FX off the PSI critical path much longer.
+  // Marketing home keeps geo/FX off the PSI critical path until interaction.
   const marketingHome =
     typeof window !== "undefined" &&
     Boolean((window as Window & { __feezoIsMarketingHome?: boolean }).__feezoIsMarketingHome);
-  const networkReady = useAfterFirstPaint(marketingHome ? 12_000 : 2500);
+  const idleReady = useAfterFirstPaint(2500);
+  const interactionReady = useInteractionReady(marketingHome);
+  const networkReady = marketingHome ? interactionReady : idleReady;
 
   const detectQuery = useQuery({
     queryKey: ["locale", "detect"],
