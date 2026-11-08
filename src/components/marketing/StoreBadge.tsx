@@ -21,11 +21,9 @@ export function StoreBadge({
       rel="noopener noreferrer"
       aria-label={isPlay ? "Get it on Google Play" : "Download on the App Store"}
       className={cn(
-        "inline-flex h-[42px] min-w-0 flex-1 items-center gap-1.5 rounded-xl px-2.5 text-white shadow-[0_8px_24px_rgba(143,202,74,0.28)] transition-colors sm:h-[46px] sm:min-w-[132px] sm:flex-none sm:gap-2 sm:px-3.5",
-        // Hardcoded greens so badges work outside MarketingShell (e.g. /download)
-        isPlay
-          ? "bg-[#2F5F16] hover:bg-[#274F12]"
-          : "bg-[#3F7A1F] hover:bg-[#356818]",
+        "inline-flex h-[42px] min-w-0 flex-1 items-center gap-1.5 rounded-xl px-2.5 text-white shadow-[0_8px_24px_rgba(47,95,22,0.28)] transition-colors sm:h-[46px] sm:min-w-[132px] sm:flex-none sm:gap-2 sm:px-3.5",
+        // Hardcoded AA greens (≥4.5:1 with white) so badges work outside MarketingShell
+        "bg-[#2F5F16] hover:bg-[#274F12]",
         className,
       )}
       whileHover={reduce ? undefined : { y: -2, scale: 1.02 }}
@@ -42,10 +40,10 @@ export function StoreBadge({
         </svg>
       )}
       <div className="flex min-w-0 flex-col leading-none">
-        <span className="truncate text-[8px] font-semibold tracking-wide text-white sm:text-[9px]">
+        <span className="truncate text-[9px] font-semibold tracking-wide text-white sm:text-[10px]">
           {isPlay ? "GET IT ON" : "Download on the"}
         </span>
-        <span className="truncate text-[12px] font-bold tracking-tight text-white sm:text-[14px]">
+        <span className="truncate text-[13px] font-bold tracking-tight text-white sm:text-[14px]">
           {isPlay ? "Google Play" : "App Store"}
         </span>
       </div>

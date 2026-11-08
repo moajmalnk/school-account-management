@@ -18,7 +18,7 @@ export function Hero({ noDelay = false }: { noDelay?: boolean }) {
         >
           Welcome To
           <br />
-          <span className="text-[#3F7A1F]">Feezo</span>
+          <span className="text-[var(--mkt-green)]">Feezo</span>
         </h1>
 
         <div className="relative mt-8 w-full sm:mt-10 lg:mt-12">
