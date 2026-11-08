@@ -75,24 +75,24 @@ export function DigitalTransformation() {
 
           {/* Top right — follow-up */}
           <motion.article
-            className={`${CARD} overflow-hidden bg-[#f4fbf0] md:h-[380px]`}
+            className={`${CARD} flex min-h-[300px] flex-col bg-[#f4fbf0] sm:min-h-[340px] lg:min-h-[380px]`}
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-60px" }}
             transition={{ duration: 0.65, ease: easeOutExpo, delay: 0.06 }}
           >
             <MintGlow position="top-right" />
-            <div className="relative z-10 flex flex-col md:h-[380px]">
-              <div className="relative z-10 flex w-full flex-col p-6 sm:p-8 md:w-[36%] md:pr-0 md:pb-4 lg:w-[38%]">
+            <div className="relative z-10 flex min-h-0 flex-1 flex-col lg:flex-row lg:items-stretch">
+              <div className="relative z-10 flex w-full flex-col p-6 sm:p-8 lg:w-[44%] lg:shrink-0 lg:pr-3">
                 <h3 className="text-[22px] font-bold leading-[1.15] text-[var(--mkt-ink)] sm:text-[26px]">
                   One-click
                   <br />
                   follow-up
                 </h3>
-                <p className="mt-2.5 max-w-[28rem] text-[13px] leading-relaxed text-[var(--mkt-ink)] md:max-w-none">
+                <p className="mt-2.5 max-w-[28rem] text-[13px] leading-relaxed text-[var(--mkt-ink)] lg:max-w-none">
                   {FOLLOW_UP.body}
                 </p>
-                <div className="mt-5 flex flex-col gap-2 sm:mt-6 md:mt-auto md:pt-4">
+                <div className="mt-5 flex flex-col gap-2 sm:mt-6 lg:mt-auto lg:pt-4">
                   {FOLLOW_UP.steps.map((label, idx) => (
                     <span
                       key={label}
@@ -112,24 +112,23 @@ export function DigitalTransformation() {
               </div>
 
               <motion.div
-                className="relative mx-auto mt-1 flex h-[210px] w-full max-w-[320px] items-end justify-center sm:h-[240px] sm:max-w-[360px] md:pointer-events-none md:absolute md:inset-y-0 md:right-0 md:mx-0 md:mt-0 md:h-full md:max-w-none md:w-[64%] md:items-end md:justify-end lg:w-[62%]"
+                className="relative mx-auto flex h-[210px] w-full max-w-[280px] items-end justify-center overflow-hidden sm:h-[240px] sm:max-w-[300px] lg:mx-0 lg:mt-auto lg:h-auto lg:min-h-[260px] lg:max-w-none lg:flex-1 lg:justify-end lg:self-stretch"
                 initial={{ opacity: 0, y: 16, scale: 0.98 }}
                 whileInView={{ opacity: 1, y: 0, scale: 1 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.75, ease: easeOutExpo, delay: 0.2 }}
               >
-                <picture>
-                  <source type="image/webp" srcSet="/digital/2.webp" />
-                  <img
-                    src="/digital/2.png"
-                    alt={FOLLOW_UP.imageAlt}
-                    width={720}
-                    height={979}
-                    className="h-full w-auto max-w-full object-contain object-bottom drop-shadow-[0_14px_32px_rgba(0,0,0,0.14)] md:max-w-none md:object-right-bottom"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </picture>
+                <img
+                  src="/digital/2.webp"
+                  alt={FOLLOW_UP.imageAlt}
+                  width={540}
+                  height={735}
+                  sizes="(max-width: 1024px) 280px, 360px"
+                  className="h-full w-auto max-h-full max-w-full object-contain object-bottom drop-shadow-[0_14px_32px_rgba(0,0,0,0.14)] lg:object-right-bottom"
+                  loading="lazy"
+                  decoding="async"
+                  fetchPriority="low"
+                />
               </motion.div>
             </div>
           </motion.article>

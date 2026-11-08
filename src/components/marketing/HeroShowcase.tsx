@@ -9,7 +9,7 @@ const POSTER_START_FALLBACK = "/home/explode-start-lcp.jpg";
 const POSTER_START_MOBILE = "/home/explode-start-720.webp";
 
 /** Bump when the video file changes so stale copies are evicted. */
-const VIDEO_VERSION = "v1";
+const VIDEO_VERSION = "v2";
 const CACHE_NAME = `feezo-hero-${VIDEO_VERSION}`;
 const CACHED_COOKIE = "feezo_hero_cached";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
@@ -135,11 +135,15 @@ function prefersLightData(): boolean {
   return Boolean(conn?.saveData) || /(^|-)2g$/.test(conn?.effectiveType ?? "");
 }
 
-/** Keep the multi-megabyte hero video off the mobile critical path. */
+/** Keep the multi-megabyte hero video off the mobile / bot critical path. */
 function prefersPosterOnly(): boolean {
   if (typeof window === "undefined") return true;
-  if (window.matchMedia("(max-width: 768px)").matches) return true;
+  if (window.matchMedia("(max-width: 1024px)").matches) return true;
   if (window.matchMedia("(prefers-reduced-data: reduce)").matches) return true;
+  if (typeof navigator !== "undefined" && "connection" in navigator) {
+    const conn = (navigator as Navigator & { connection?: { downlink?: number } }).connection;
+    if (typeof conn?.downlink === "number" && conn.downlink > 0 && conn.downlink < 5) return true;
+  }
   return prefersLightData();
 }
 
@@ -332,23 +336,18 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
         style={AMBIENT_BACKDROP}
       />
       <div className="absolute inset-0" style={EDGE_FEATHER}>
-        <picture>
-          <source
-            type="image/webp"
-            srcSet={`${POSTER_START_MOBILE} 720w, ${POSTER_START} 960w`}
-            sizes="(max-width: 768px) 100vw, 960px"
-          />
-          <img
-            src={POSTER_START_FALLBACK}
-            alt={alt}
-            width={960}
-            height={540}
-            decoding="async"
-            fetchPriority="high"
-            className="absolute inset-0 h-full w-full select-none object-contain"
-            draggable={false}
-          />
-        </picture>
+        <img
+          src={POSTER_START_MOBILE}
+          srcSet={`${POSTER_START_MOBILE} 720w, ${POSTER_START} 960w`}
+          sizes="(max-width: 768px) 100vw, 960px"
+          alt={alt}
+          width={720}
+          height={405}
+          decoding="async"
+          fetchPriority="high"
+          className="absolute inset-0 h-full w-full select-none object-contain"
+          draggable={false}
+        />
 
         {canPlay && src ? (
           <motion.video

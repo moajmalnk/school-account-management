@@ -56,7 +56,7 @@ export function PwaInstallBanner() {
             <div className="h-1 w-full bg-gradient-to-r from-[#0F766E] via-[#14B8A6] to-[#0F766E]" />
             <div className="flex items-start gap-3 p-3.5 sm:p-4">
               <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-950">
-                <img src="/icons/feezo-mark.png" alt="" className="h-9 w-9 object-contain" />
+                <img src="/icons/feezo-mark.webp" alt="" width={96} height={96} className="h-9 w-9 object-contain" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="pr-8 text-[14px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
@@ -197,7 +197,7 @@ export function PwaInstallCard({ className }: { className?: string }) {
       >
         <div className="flex items-start gap-3">
           <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-950">
-            <img src="/icons/feezo-mark.png" alt="" className="h-10 w-10 object-contain" />
+            <img src="/icons/feezo-mark.webp" alt="" width={96} height={96} className="h-10 w-10 object-contain" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[14px] font-semibold text-slate-900 dark:text-zinc-50">

@@ -209,8 +209,9 @@ function ShowcaseStrip() {
               <img
                 src={item.image}
                 alt={item.alt}
-                width={540}
-                height={960}
+                width={480}
+                height={854}
+                sizes="(max-width: 640px) 72vw, 473px"
                 className="h-full w-full object-cover object-top"
                 loading="lazy"
                 decoding="async"

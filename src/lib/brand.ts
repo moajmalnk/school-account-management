@@ -2,7 +2,7 @@
 export const BRAND = {
   name: "Feezo",
   tagline: "Edu Books",
-  mark: "/icons/feezo-mark.png",
+  mark: "/icons/feezo-mark.webp",
   /** Google Play listing — used by marketing store badges. */
   playStoreUrl: "https://play.google.com/store/apps/details?id=com.bzole.feezo",
   appStoreUrl: "https://apps.apple.com/in/app/feezo/id6811416005",

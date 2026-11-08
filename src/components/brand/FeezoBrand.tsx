@@ -2,7 +2,16 @@ import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
 
 export function FeezoMark({ className }: { className?: string }) {
-  return <img src={BRAND.mark} alt="" className={cn("h-full w-full object-contain", className)} />;
+  return (
+    <img
+      src={BRAND.mark}
+      alt=""
+      width={96}
+      height={96}
+      decoding="async"
+      className={cn("h-full w-full object-contain", className)}
+    />
+  );
 }
 
 export function FeezoBrand({
@@ -29,6 +38,9 @@ export function FeezoBrand({
         <img
           src={BRAND.mark}
           alt={BRAND.name}
+          width={96}
+          height={96}
+          decoding="async"
           className={cn("h-11 w-11 object-contain xl:h-12 xl:w-12", markClassName)}
         />
       </div>
@@ -46,6 +58,9 @@ export function FeezoBrand({
       <img
         src={BRAND.mark}
         alt=""
+        width={96}
+        height={96}
+        decoding="async"
         className={cn(
           "shrink-0 object-contain",
           stacked ? "h-12 w-12 xl:h-14 xl:w-14" : "h-9 w-9",
