@@ -92,45 +92,9 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: "prompt",
         includeAssets: ["favicon.svg", "icons/**/*"],
-        manifest: {
-          name: "Feezo",
-          short_name: "Feezo",
-          description: "Multi-tenant school management for students, staff, finance, and settings.",
-          theme_color: "#0F766E",
-          background_color: "#EAEAEA",
-          display: "standalone",
-          orientation: "any",
-          start_url: "/",
-          scope: "/",
-          lang: "en",
-          categories: ["education", "business", "productivity"],
-          icons: [
-            {
-              src: "/icons/icon-192.png",
-              sizes: "192x192",
-              type: "image/png",
-              purpose: "any",
-            },
-            {
-              src: "/icons/icon-512.png",
-              sizes: "512x512",
-              type: "image/png",
-              purpose: "any",
-            },
-            {
-              src: "/icons/icon-maskable-192.png",
-              sizes: "192x192",
-              type: "image/png",
-              purpose: "maskable",
-            },
-            {
-              src: "/icons/icon-maskable-512.png",
-              sizes: "512x512",
-              type: "image/png",
-              purpose: "maskable",
-            },
-          ],
-        },
+        // Use public/manifest.webmanifest and inject the <link> after load (index.html)
+        // so the webmanifest stays off the LCP critical path.
+        manifest: false,
         workbox: {
           globPatterns: ["**/*.{js,css,html,ico,svg,woff2,webp}", "icons/**/*.png"],
           navigateFallback: "/index.html",
