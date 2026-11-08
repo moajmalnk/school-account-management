@@ -58,15 +58,48 @@ function readStored() {
   };
 }
 
+/** Keep geo/FX API calls off the LCP critical path; hydrate after first paint. */
+function useAfterFirstPaint(timeoutMs = 2500) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let idleId: number | undefined;
+    let timer: number | undefined;
+    const arm = () => {
+      const w = window as Window & {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+        cancelIdleCallback?: (id: number) => void;
+      };
+      if (w.requestIdleCallback) {
+        idleId = w.requestIdleCallback(() => setReady(true), { timeout: timeoutMs });
+      } else {
+        timer = window.setTimeout(() => setReady(true), Math.min(timeoutMs, 1200));
+      }
+    };
+    if (document.readyState === "complete") arm();
+    else window.addEventListener("load", arm, { once: true });
+    return () => {
+      if (idleId !== undefined) {
+        (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(
+          idleId,
+        );
+      }
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [timeoutMs]);
+  return ready;
+}
+
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const [initial] = useState(readStored);
   const [currency, setCurrencyState] = useState<CurrencyCode>(initial.currency);
   const [country, setCountryState] = useState<string>(initial.country);
   const [isAuto, setIsAuto] = useState<boolean>(!initial.manual);
+  const networkReady = useAfterFirstPaint();
 
   const detectQuery = useQuery({
     queryKey: ["locale", "detect"],
     queryFn: async () => apiLocaleDetect(await fetchGeoHint()),
+    enabled: networkReady,
     staleTime: 12 * 60 * 60 * 1000,
     gcTime: 12 * 60 * 60 * 1000,
     retry: 1,
@@ -76,6 +109,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const fxQuery = useQuery({
     queryKey: ["locale", "fx"],
     queryFn: apiFxRates,
+    enabled: networkReady,
     staleTime: 6 * 60 * 60 * 1000,
     gcTime: 6 * 60 * 60 * 1000,
     retry: 1,
