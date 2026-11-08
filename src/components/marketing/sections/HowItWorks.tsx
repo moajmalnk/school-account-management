@@ -67,7 +67,7 @@ function StatPill({
 
 /** App Store–style single-row screenshot strip */
 function ShowcaseStrip() {
-  const scrollerRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLUListElement>(null);
   const reduce = useReducedMotion();
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(true);
@@ -204,13 +204,13 @@ function ShowcaseStrip() {
         <ChevronRight className="h-5 w-5" strokeWidth={1.75} />
       </button>
 
-      <div
+      <ul
         ref={scrollerRef}
-        className="mkt-showcase-strip flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[max(1.25rem,calc((100vw-72rem)/2+1.25rem))] pb-2 pt-1 sm:gap-4 sm:px-[max(2rem,calc((100vw-72rem)/2+2rem))]"
+        className="mkt-showcase-strip flex list-none snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[max(1.25rem,calc((100vw-72rem)/2+1.25rem))] pb-2 pt-1 sm:gap-4 sm:px-[max(2rem,calc((100vw-72rem)/2+2rem))]"
         aria-label="App screenshots"
       >
         {showcase.items.map((item, index) => (
-          <motion.figure
+          <motion.li
             key={item.id}
             data-shot
             data-index={index}
@@ -220,33 +220,35 @@ function ShowcaseStrip() {
             viewport={{ once: true, margin: "-40px" }}
             transition={{ duration: 0.55, ease: easeOutExpo, delay: Math.min(index, 4) * 0.05 }}
           >
-            <div className="h-full overflow-hidden rounded-[1.15rem] bg-white shadow-[0_18px_48px_-28px_rgba(26,28,44,0.45)] ring-1 ring-black/[0.05] sm:rounded-[1.35rem]">
-              <img
-                src={item.image}
-                alt={item.alt}
-                width={480}
-                height={854}
-                sizes="(max-width: 640px) 72vw, 473px"
-                className="h-full w-full object-cover object-top"
-                loading="lazy"
-                decoding="async"
-                draggable={false}
-                fetchPriority="low"
-              />
-            </div>
-            <figcaption className="sr-only">
-              {item.eyebrow}: {item.headline}
-            </figcaption>
-          </motion.figure>
+            <figure className="m-0 h-full">
+              <div className="h-full overflow-hidden rounded-[1.15rem] bg-white shadow-[0_18px_48px_-28px_rgba(26,28,44,0.45)] ring-1 ring-black/[0.05] sm:rounded-[1.35rem]">
+                <img
+                  src={item.image}
+                  alt={item.alt}
+                  width={480}
+                  height={854}
+                  sizes="(max-width: 640px) 72vw, 473px"
+                  className="h-full w-full object-cover object-top"
+                  loading="lazy"
+                  decoding="async"
+                  draggable={false}
+                  fetchPriority="low"
+                />
+              </div>
+              <figcaption className="sr-only">
+                {item.eyebrow}: {item.headline}
+              </figcaption>
+            </figure>
+          </motion.li>
         ))}
         {/* End spacer — lets last card snap fully into view */}
-        <div className="w-[12vw] shrink-0 sm:w-[18vw]" aria-hidden />
-      </div>
+        <li className="w-[12vw] shrink-0 list-none sm:w-[18vw]" aria-hidden />
+      </ul>
 
-      {/* Page dots — 48×48 touch targets; visual dots stay small inside */}
+      {/* Page dots — 48×48 targets; group (not tablist) — no tabpanels here */}
       <div
         className="mt-5 flex items-center justify-center gap-1"
-        role="tablist"
+        role="group"
         aria-label="Screenshot pages"
       >
         {showcase.items.map((item, i) => {
@@ -255,8 +257,7 @@ function ShowcaseStrip() {
             <button
               key={item.id}
               type="button"
-              role="tab"
-              aria-selected={isActive}
+              aria-current={isActive ? "true" : undefined}
               aria-label={`${i + 1} of ${total}: ${item.eyebrow}`}
               onClick={() => scrollToIndex(i)}
               className={cn(
