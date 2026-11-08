@@ -8,7 +8,7 @@ const POSTER_START = "/home/explode-start.webp";
 const POSTER_START_MOBILE = "/home/explode-start-720.webp";
 
 /** Bump when the video file changes so stale copies are evicted. */
-const VIDEO_VERSION = "v2";
+const VIDEO_VERSION = "v3";
 const CACHE_NAME = `feezo-hero-${VIDEO_VERSION}`;
 const CACHED_COOKIE = "feezo_hero_cached";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
@@ -171,36 +171,28 @@ async function readCachedVideo(): Promise<string | null> {
   }
 }
 
-/** Stores the full video (not a range slice) and drops older versions. */
-async function storeVideo(): Promise<void> {
-  if (!cacheSupported()) return;
-  try {
-    const keys = await caches.keys();
-    await Promise.all(
-      keys
-        .filter((k) => k.startsWith("feezo-hero-") && k !== CACHE_NAME)
-        .map((k) => caches.delete(k)),
-    );
-    const res = await fetch(VIDEO_SRC, { cache: "force-cache" });
-    if (!res.ok || res.status !== 200) return;
-    await (await caches.open(CACHE_NAME)).put(VIDEO_SRC, res);
-    markCached();
-  } catch {
-    /* quota or network — the network copy keeps working */
+/** One network transfer: populate Cache Storage and return a blob URL (no second fetch). */
+async function loadVideoOnce(): Promise<string> {
+  if (cacheSupported()) {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((k) => k.startsWith("feezo-hero-") && k !== CACHE_NAME)
+          .map((k) => caches.delete(k)),
+      );
+      const res = await fetch(VIDEO_SRC, { cache: "force-cache" });
+      if (res.ok && res.status === 200) {
+        const clone = res.clone();
+        const blob = await res.blob();
+        void (await caches.open(CACHE_NAME)).put(VIDEO_SRC, clone).then(markCached).catch(() => undefined);
+        return URL.createObjectURL(blob);
+      }
+    } catch {
+      /* fall through to direct URL */
+    }
   }
-}
-
-function whenIdle(fn: () => void): () => void {
-  const w = window as Window & {
-    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
-    cancelIdleCallback?: (id: number) => void;
-  };
-  if (w.requestIdleCallback) {
-    const id = w.requestIdleCallback(fn, { timeout: 4000 });
-    return () => w.cancelIdleCallback?.(id);
-  }
-  const id = window.setTimeout(fn, 1500);
-  return () => window.clearTimeout(id);
+  return VIDEO_SRC;
 }
 
 /**
@@ -252,14 +244,14 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
 
   const canPlay = enabled && !reduce && !failed;
 
-  // Resolve the source: cached blob if present, otherwise network + background caching.
+  // Resolve the source once — never fetch the MP4 a second time for caching.
   useEffect(() => {
     if (!canPlay) return;
     let cancelled = false;
     let objectUrl: string | null = null;
-    let cancelIdle: (() => void) | undefined;
 
-    void readCachedVideo().then((cached) => {
+    void (async () => {
+      const cached = await readCachedVideo();
       if (cancelled) {
         if (cached) URL.revokeObjectURL(cached);
         return;
@@ -270,13 +262,17 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
         if (!returning) markCached();
         return;
       }
-      setSrc(VIDEO_SRC);
-      cancelIdle = whenIdle(() => void storeVideo());
-    });
+      const next = await loadVideoOnce();
+      if (cancelled) {
+        if (next.startsWith("blob:")) URL.revokeObjectURL(next);
+        return;
+      }
+      if (next.startsWith("blob:")) objectUrl = next;
+      setSrc(next);
+    })();
 
     return () => {
       cancelled = true;
-      cancelIdle?.();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [canPlay, returning]);

@@ -73,14 +73,18 @@ export function handleMarketingSectionClick(
   scrollToMarketingSection(sectionId);
 }
 
-/** Warm lazy marketing sections so anchor links resolve quickly. */
+/** Warm lazy marketing sections so anchor links resolve quickly (idle, not on LCP). */
 export function preloadMarketingSections(): void {
-  const warm = (factory: () => Promise<unknown>) => {
-    void factory().catch(() => undefined);
+  const warm = () => {
+    void import("@/components/marketing/sections/HowItWorks").catch(() => undefined);
+    void import("@/components/marketing/sections/Features").catch(() => undefined);
+    void import("@/components/marketing/sections/DigitalTransformation").catch(() => undefined);
+    void import("@/components/marketing/sections/Testimonials").catch(() => undefined);
+    void import("@/components/marketing/sections/Pricing").catch(() => undefined);
   };
-  warm(() => import("@/components/marketing/sections/HowItWorks"));
-  warm(() => import("@/components/marketing/sections/Features"));
-  warm(() => import("@/components/marketing/sections/DigitalTransformation"));
-  warm(() => import("@/components/marketing/sections/Testimonials"));
-  warm(() => import("@/components/marketing/sections/Pricing"));
+  const w = window as Window & {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+  };
+  if (w.requestIdleCallback) w.requestIdleCallback(warm, { timeout: 4000 });
+  else window.setTimeout(warm, 1200);
 }
