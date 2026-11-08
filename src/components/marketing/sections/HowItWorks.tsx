@@ -76,11 +76,13 @@ function ShowcaseStrip() {
   const rafRef = useRef(0);
   const metricsRef = useRef({ scrollWidth: 0, clientWidth: 0, maxScroll: 0 });
   const offsetsRef = useRef<number[]>([]);
+  const measureRafRef = useRef(0);
   const total = showcase.items.length;
 
   const measureScroller = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
+    // One read pass per frame — avoid forced reflow between style invalidation and layout.
     const scrollWidth = el.scrollWidth;
     const clientWidth = el.clientWidth;
     metricsRef.current = {
@@ -88,8 +90,9 @@ function ShowcaseStrip() {
       clientWidth,
       maxScroll: Math.max(0, scrollWidth - clientWidth),
     };
+    // Read all geometry in this same frame (scheduled via rAF) — no interleaved writes.
     offsetsRef.current = Array.from(el.querySelectorAll<HTMLElement>("[data-shot]")).map((card) =>
-      Math.max(0, card.offsetLeft - 20),
+      Math.max(0, card.offsetLeft - el.scrollLeft - 20),
     );
   }, []);
 
@@ -111,6 +114,15 @@ function ShowcaseStrip() {
     }
   }, [total]);
 
+  const scheduleMeasure = useCallback(() => {
+    if (measureRafRef.current) return;
+    measureRafRef.current = window.requestAnimationFrame(() => {
+      measureRafRef.current = 0;
+      measureScroller();
+      syncEdges();
+    });
+  }, [measureScroller, syncEdges]);
+
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -123,15 +135,13 @@ function ShowcaseStrip() {
       });
     };
 
-    measureScroller();
-    syncEdges();
+    scheduleMeasure();
     el.addEventListener("scroll", onScroll, { passive: true });
 
     const ro =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => {
-            measureScroller();
-            syncEdges();
+            scheduleMeasure();
           })
         : null;
     ro?.observe(el);
@@ -164,9 +174,10 @@ function ShowcaseStrip() {
       el.removeEventListener("scroll", onScroll);
       ro?.disconnect();
       if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
+      if (measureRafRef.current) window.cancelAnimationFrame(measureRafRef.current);
       io?.disconnect();
     };
-  }, [measureScroller, syncEdges]);
+  }, [scheduleMeasure, syncEdges]);
 
   const scrollToIndex = useCallback(
     (index: number) => {
@@ -251,11 +262,12 @@ function ShowcaseStrip() {
             <figure className="m-0 h-full">
               <div className="h-full overflow-hidden rounded-[1.15rem] bg-white shadow-[0_18px_48px_-28px_rgba(26,28,44,0.45)] ring-1 ring-black/[0.05] sm:rounded-[1.35rem]">
                 <img
-                  src={item.image}
+                  src={item.image.replace(/\.webp$/, "-360.webp")}
+                  srcSet={`${item.image.replace(/\.webp$/, "-360.webp")} 360w, ${item.image} 480w`}
                   alt={item.alt}
-                  width={480}
-                  height={854}
-                  sizes="(max-width: 640px) 72vw, 473px"
+                  width={360}
+                  height={640}
+                  sizes="(max-width: 640px) 72vw, 349px"
                   className="h-full w-full object-cover object-top"
                   loading="lazy"
                   decoding="async"

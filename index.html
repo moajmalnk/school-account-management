@@ -46,19 +46,37 @@
         if (!marketing) document.documentElement.classList.add("no-boot");
       })();
     </script>
-    <link rel="preload" as="image" href="/home/explode-start-640.webp" type="image/webp" fetchpriority="high" />
-    <link rel="preconnect" href="https://api.feezo.app" crossorigin />
+    <link
+      rel="preload"
+      as="image"
+      type="image/webp"
+      fetchpriority="high"
+      href="/home/explode-start-640.webp"
+      imagesrcset="/home/explode-start-640.webp 640w, /home/explode-start-720.webp 720w, /home/explode-start.webp 960w"
+      imagesizes="(max-width: 768px) 100vw, min(100vw, 720px)"
+    />
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
     <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
     <script>
       (function () {
+        // Marketing home skips API preconnect — locale/FX stay deferred past LCP.
+        if (!window.__feezoIsMarketingHome) {
+          var api = document.createElement("link");
+          api.rel = "preconnect";
+          api.href = "https://api.feezo.app";
+          api.crossOrigin = "";
+          document.head.appendChild(api);
+        }
         function addStylesheet(href) {
           var link = document.createElement("link");
           link.rel = "stylesheet";
           link.href = href;
           document.head.appendChild(link);
         }
+        var fontsLoaded = false;
         function loadFonts() {
+          if (fontsLoaded) return;
+          fontsLoaded = true;
           addStylesheet(
             "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap",
           );
@@ -67,6 +85,15 @@
           );
         }
         function arm() {
+          if (window.__feezoIsMarketingHome) {
+            var onInteract = function () {
+              loadFonts();
+            };
+            window.addEventListener("scroll", onInteract, { once: true, passive: true });
+            window.addEventListener("pointerdown", onInteract, { once: true, passive: true });
+            setTimeout(loadFonts, 12000);
+            return;
+          }
           if ("requestIdleCallback" in window) {
             requestIdleCallback(loadFonts, { timeout: 8000 });
           } else {
@@ -122,6 +149,8 @@
         <h1>Welcome To<br /><span>Feezo</span></h1>
         <img
           src="/home/explode-start-640.webp"
+          srcset="/home/explode-start-640.webp 640w, /home/explode-start-720.webp 720w, /home/explode-start.webp 960w"
+          sizes="(max-width: 768px) 100vw, min(100vw, 720px)"
           width="640"
           height="360"
           alt="Feezo tenant dashboard with income, expenses, and cash position"

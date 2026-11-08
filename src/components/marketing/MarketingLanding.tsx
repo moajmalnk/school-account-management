@@ -127,9 +127,9 @@ export function MarketingLanding() {
         cancelIdleCallback?: (id: number) => void;
       };
       if (w.requestIdleCallback) {
-        idleId = w.requestIdleCallback(unlock, { timeout: 3500 });
+        idleId = w.requestIdleCallback(unlock, { timeout: 8000 });
       } else {
-        timer = window.setTimeout(unlock, 2000);
+        timer = window.setTimeout(unlock, 4500);
       }
     };
     if (document.readyState === "complete") arm();

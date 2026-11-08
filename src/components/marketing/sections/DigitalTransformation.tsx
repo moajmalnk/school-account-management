@@ -119,8 +119,8 @@ export function DigitalTransformation() {
                 transition={{ duration: 0.75, ease: easeOutExpo, delay: 0.2 }}
               >
                 <img
-                  src="/digital/2-360.webp"
-                  srcSet="/digital/2-360.webp 360w, /digital/2.webp 540w"
+                  src="/digital/2-280.webp"
+                  srcSet="/digital/2-280.webp 280w, /digital/2-360.webp 360w, /digital/2.webp 540w"
                   alt={FOLLOW_UP.imageAlt}
                   width={360}
                   height={490}
