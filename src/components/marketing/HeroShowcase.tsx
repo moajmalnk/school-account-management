@@ -5,6 +5,7 @@ import { easeOutExpo } from "@/components/marketing/motion";
 
 const VIDEO_SRC = "/explode_video.mp4";
 const POSTER_START = "/home/explode-start.webp";
+const POSTER_START_MID = "/home/explode-start-640.webp";
 const POSTER_START_MOBILE = "/home/explode-start-720.webp";
 
 /** Bump when the video file changes so stale copies are evicted. */
@@ -347,12 +348,12 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
       />
       <div className="absolute inset-0" style={EDGE_FEATHER}>
         <img
-          src={POSTER_START_MOBILE}
-          srcSet={`${POSTER_START_MOBILE} 720w, ${POSTER_START} 960w`}
-          sizes="(max-width: 768px) 100vw, 960px"
+          src={POSTER_START_MID}
+          srcSet={`${POSTER_START_MID} 640w, ${POSTER_START_MOBILE} 720w, ${POSTER_START} 960w`}
+          sizes="(max-width: 768px) 100vw, min(100vw, 720px)"
           alt={alt}
-          width={720}
-          height={405}
+          width={640}
+          height={360}
           loading="eager"
           decoding="async"
           fetchPriority="high"

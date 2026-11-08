@@ -46,7 +46,7 @@
         if (!marketing) document.documentElement.classList.add("no-boot");
       })();
     </script>
-    <link rel="preload" as="image" href="/home/explode-start-720.webp" type="image/webp" fetchpriority="high" />
+    <link rel="preload" as="image" href="/home/explode-start-640.webp" type="image/webp" fetchpriority="high" />
     <link rel="preconnect" href="https://api.feezo.app" crossorigin />
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
     <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
@@ -68,9 +68,9 @@
         }
         function arm() {
           if ("requestIdleCallback" in window) {
-            requestIdleCallback(loadFonts, { timeout: 2500 });
+            requestIdleCallback(loadFonts, { timeout: 8000 });
           } else {
-            setTimeout(loadFonts, 1);
+            setTimeout(loadFonts, 4000);
           }
         }
         if (document.readyState === "complete") arm();
@@ -99,7 +99,7 @@
             manifest.href = "/manifest.webmanifest";
             document.head.appendChild(manifest);
           }
-        }, 0);
+        }, 4000);
         afterLoad(function () {
           window.dataLayer = window.dataLayer || [];
           function gtag() {
@@ -120,9 +120,9 @@
       <div class="boot-inner">
         <h1>Welcome To<br /><span>Feezo</span></h1>
         <img
-          src="/home/explode-start-720.webp"
-          width="720"
-          height="405"
+          src="/home/explode-start-640.webp"
+          width="640"
+          height="360"
           alt="Feezo tenant dashboard with income, expenses, and cash position"
           fetchpriority="high"
           loading="eager"

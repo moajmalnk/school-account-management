@@ -74,17 +74,35 @@ function ShowcaseStrip() {
   const [active, setActive] = useState(0);
   const activeRef = useRef(0);
   const rafRef = useRef(0);
+  const metricsRef = useRef({ scrollWidth: 0, clientWidth: 0, maxScroll: 0 });
+  const offsetsRef = useRef<number[]>([]);
   const total = showcase.items.length;
+
+  const measureScroller = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const scrollWidth = el.scrollWidth;
+    const clientWidth = el.clientWidth;
+    metricsRef.current = {
+      scrollWidth,
+      clientWidth,
+      maxScroll: Math.max(0, scrollWidth - clientWidth),
+    };
+    offsetsRef.current = Array.from(el.querySelectorAll<HTMLElement>("[data-shot]")).map((card) =>
+      Math.max(0, card.offsetLeft - 20),
+    );
+  }, []);
 
   const syncEdges = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
-    const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
-    const nextPrev = el.scrollLeft > 6;
-    const nextNext = el.scrollLeft < maxScroll - 6;
+    const { maxScroll } = metricsRef.current;
+    const scrollLeft = el.scrollLeft;
+    const nextPrev = scrollLeft > 6;
+    const nextNext = scrollLeft < maxScroll - 6;
     setCanPrev((prev) => (prev === nextPrev ? prev : nextPrev));
     setCanNext((prev) => (prev === nextNext ? prev : nextNext));
-    if (maxScroll > 0 && el.scrollLeft >= maxScroll - 12) {
+    if (maxScroll > 0 && scrollLeft >= maxScroll - 12) {
       const last = total - 1;
       if (activeRef.current !== last) {
         activeRef.current = last;
@@ -105,9 +123,18 @@ function ShowcaseStrip() {
       });
     };
 
+    measureScroller();
     syncEdges();
     el.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
+
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            measureScroller();
+            syncEdges();
+          })
+        : null;
+    ro?.observe(el);
 
     const cards = Array.from(el.querySelectorAll<HTMLElement>("[data-shot]"));
     const io =
@@ -135,27 +162,28 @@ function ShowcaseStrip() {
 
     return () => {
       el.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      ro?.disconnect();
       if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
       io?.disconnect();
     };
-  }, [syncEdges]);
+  }, [measureScroller, syncEdges]);
 
   const scrollToIndex = useCallback(
     (index: number) => {
       const el = scrollerRef.current;
       if (!el) return;
-      const card = el.querySelector<HTMLElement>(`[data-shot][data-index="${index}"]`);
-      if (!card) return;
-      // offsetLeft avoids getBoundingClientRect during interaction.
+      const left = offsetsRef.current[index];
+      if (typeof left !== "number") {
+        measureScroller();
+      }
       el.scrollTo({
-        left: Math.max(0, card.offsetLeft - 20),
+        left: offsetsRef.current[index] ?? 0,
         behavior: reduce ? "auto" : "smooth",
       });
       activeRef.current = index;
       setActive(index);
     },
-    [reduce],
+    [measureScroller, reduce],
   );
 
   const scrollByCard = (dir: -1 | 1) => {

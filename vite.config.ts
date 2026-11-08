@@ -31,6 +31,26 @@ function appVersionPlugin(buildId: string): Plugin {
   };
 }
 
+/**
+ * Keep Vite CSS off the render-blocking critical path. Boot-shell styles in
+ * index.html cover first paint; the full sheet applies as soon as it loads.
+ */
+function deferStylesheetPlugin(): Plugin {
+  return {
+    name: "feezo-defer-stylesheet",
+    apply: "build",
+    enforce: "post",
+    transformIndexHtml(html) {
+      return html.replace(
+        /<link([^>]*\s)rel="stylesheet"([^>]*?)href="([^"]+\.css)"([^>]*)>/g,
+        (_match, before, mid, href, after) =>
+          `<link${before}rel="preload" as="style"${mid}href="${href}"${after} onload="this.onload=null;this.rel='stylesheet'">` +
+          `<noscript><link rel="stylesheet" href="${href}"></noscript>`,
+      );
+    },
+  };
+}
+
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -89,6 +109,7 @@ export default defineConfig(({ mode }) => {
       tsConfigPaths({ projects: ["./tsconfig.json"] }),
       viteReact(),
       appVersionPlugin(buildId),
+      deferStylesheetPlugin(),
       VitePWA({
         registerType: "prompt",
         includeAssets: ["favicon.svg", "icons/**/*"],

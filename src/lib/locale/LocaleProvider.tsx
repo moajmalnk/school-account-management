@@ -94,7 +94,11 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const [currency, setCurrencyState] = useState<CurrencyCode>(initial.currency);
   const [country, setCountryState] = useState<string>(initial.country);
   const [isAuto, setIsAuto] = useState<boolean>(!initial.manual);
-  const networkReady = useAfterFirstPaint();
+  // Marketing home keeps geo/FX off the PSI critical path much longer.
+  const marketingHome =
+    typeof window !== "undefined" &&
+    Boolean((window as Window & { __feezoIsMarketingHome?: boolean }).__feezoIsMarketingHome);
+  const networkReady = useAfterFirstPaint(marketingHome ? 12_000 : 2500);
 
   const detectQuery = useQuery({
     queryKey: ["locale", "detect"],
