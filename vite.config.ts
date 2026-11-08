@@ -31,23 +31,6 @@ function appVersionPlugin(buildId: string): Plugin {
   };
 }
 
-/** Keep the stylesheet off the critical path so LCP is not blocked by the main CSS bundle. */
-function asyncCssPlugin(): Plugin {
-  return {
-    name: "feezo-async-css",
-    apply: "build",
-    enforce: "post",
-    transformIndexHtml(html) {
-      return html.replace(/<link\b([^>]*\bhref="([^"]+\.css)"[^>]*)>/gi, (match, attrs, href) => {
-        if (!/\brel=["']stylesheet["']/i.test(attrs) || /\bonload=/.test(attrs)) return match;
-        const cleaned = attrs
-          .replace(/\s*rel=["']stylesheet["']/i, "")
-          .replace(/\s*as=["'][^"']*["']/i, "");
-        return `<link rel="preload" as="style"${cleaned} onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="${href}"></noscript>`;
-      });
-    },
-  };
-}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -106,7 +89,6 @@ export default defineConfig(({ mode }) => {
       tsConfigPaths({ projects: ["./tsconfig.json"] }),
       viteReact(),
       appVersionPlugin(buildId),
-      asyncCssPlugin(),
       VitePWA({
         registerType: "prompt",
         includeAssets: ["favicon.svg", "icons/**/*"],

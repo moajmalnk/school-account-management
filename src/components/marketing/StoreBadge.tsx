@@ -24,8 +24,8 @@ export function StoreBadge({
         "inline-flex h-[42px] min-w-0 flex-1 items-center gap-1.5 rounded-xl px-2.5 text-white shadow-[0_8px_24px_rgba(143,202,74,0.28)] transition-colors sm:h-[46px] sm:min-w-[132px] sm:flex-none sm:gap-2 sm:px-3.5",
         // Hardcoded greens so badges work outside MarketingShell (e.g. /download)
         isPlay
-          ? "bg-[#8FCA4A] hover:bg-[#6BA832]"
-          : "bg-[#A8D96A] hover:bg-[#97C85C]",
+          ? "bg-[#3F7A1F] hover:bg-[#356818]"
+          : "bg-[#4D8C28] hover:bg-[#3F7A1F]",
         className,
       )}
       whileHover={reduce ? undefined : { y: -2, scale: 1.02 }}
@@ -42,10 +42,10 @@ export function StoreBadge({
         </svg>
       )}
       <div className="flex min-w-0 flex-col leading-none">
-        <span className="truncate text-[7px] font-semibold tracking-wide opacity-90 sm:text-[9px]">
+        <span className="truncate text-[8px] font-semibold tracking-wide text-white sm:text-[9px]">
           {isPlay ? "GET IT ON" : "Download on the"}
         </span>
-        <span className="truncate text-[11px] font-bold tracking-tight sm:text-[14px]">
+        <span className="truncate text-[12px] font-bold tracking-tight text-white sm:text-[14px]">
           {isPlay ? "Google Play" : "App Store"}
         </span>
       </div>

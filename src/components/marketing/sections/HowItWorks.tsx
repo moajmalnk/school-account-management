@@ -192,7 +192,6 @@ function ShowcaseStrip() {
       <div
         ref={scrollerRef}
         className="mkt-showcase-strip flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[max(1.25rem,calc((100vw-72rem)/2+1.25rem))] pb-2 pt-1 sm:gap-4 sm:px-[max(2rem,calc((100vw-72rem)/2+2rem))]"
-        role="list"
         aria-label="App screenshots"
       >
         {showcase.items.map((item, index) => (
@@ -200,7 +199,6 @@ function ShowcaseStrip() {
             key={item.id}
             data-shot
             data-index={index}
-            role="listitem"
             className="mkt-showcase-shot relative shrink-0 snap-start"
             initial={reduce ? false : { opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -246,12 +244,20 @@ function ShowcaseStrip() {
               aria-label={`${i + 1} of ${total}: ${item.eyebrow}`}
               onClick={() => scrollToIndex(i)}
               className={cn(
-                "rounded-full transition-all duration-300 ease-out",
-                isActive
-                  ? "h-2 w-6 bg-[var(--mkt-green-deep)] shadow-[0_0_0_3px_rgba(107,168,50,0.18)]"
-                  : "h-2 w-2 bg-[var(--mkt-ink)]/20 hover:bg-[var(--mkt-ink)]/40",
+                "inline-flex h-6 min-w-6 items-center justify-center rounded-full p-2 transition-colors duration-300 ease-out",
+                isActive ? "bg-[rgba(107,168,50,0.14)]" : "hover:bg-[rgba(26,28,44,0.06)]",
               )}
-            />
+            >
+              <span
+                className={cn(
+                  "rounded-full transition-all duration-300 ease-out",
+                  isActive
+                    ? "h-2 w-6 bg-[var(--mkt-green-deep)]"
+                    : "h-2 w-2 bg-[var(--mkt-ink)]/25",
+                )}
+                aria-hidden
+              />
+            </button>
           );
         })}
       </div>
