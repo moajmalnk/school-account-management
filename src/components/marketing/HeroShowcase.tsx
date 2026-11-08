@@ -4,7 +4,9 @@ import { motion, useReducedMotion } from "motion/react";
 import { easeOutExpo } from "@/components/marketing/motion";
 
 const VIDEO_SRC = "/explode_video.mp4";
-const POSTER_START = "/home/explode-start.jpg";
+const POSTER_START = "/home/explode-start.webp";
+const POSTER_START_FALLBACK = "/home/explode-start-lcp.jpg";
+const POSTER_START_MOBILE = "/home/explode-start-720.webp";
 
 /** Bump when the video file changes so stale copies are evicted. */
 const VIDEO_VERSION = "v1";
@@ -133,6 +135,14 @@ function prefersLightData(): boolean {
   return Boolean(conn?.saveData) || /(^|-)2g$/.test(conn?.effectiveType ?? "");
 }
 
+/** Keep the multi-megabyte hero video off the mobile critical path. */
+function prefersPosterOnly(): boolean {
+  if (typeof window === "undefined") return true;
+  if (window.matchMedia("(max-width: 768px)").matches) return true;
+  if (window.matchMedia("(prefers-reduced-data: reduce)").matches) return true;
+  return prefersLightData();
+}
+
 function hasCachedCookie(): boolean {
   if (typeof document === "undefined") return false;
   return document.cookie.split("; ").some((c) => c === `${CACHED_COOKIE}=${VIDEO_VERSION}`);
@@ -208,7 +218,7 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
   const [failed, setFailed] = useState(false);
   const [inView, setInView] = useState(true);
   const [pageVisible, setPageVisible] = useState(true);
-  const [enabled] = useState(() => !prefersLightData() && !isSearchCrawler());
+  const [enabled] = useState(() => !prefersPosterOnly() && !isSearchCrawler());
   const [returning] = useState(hasCachedCookie);
   const bufferTimer = useRef<number | undefined>(undefined);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -322,22 +332,29 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
         style={AMBIENT_BACKDROP}
       />
       <div className="absolute inset-0" style={EDGE_FEATHER}>
-        <img
-          src={POSTER_START}
-          alt={alt}
-          width={1280}
-          height={720}
-          decoding="async"
-          fetchPriority="high"
-          className="absolute inset-0 h-full w-full select-none object-contain"
-          draggable={false}
-        />
+        <picture>
+          <source
+            type="image/webp"
+            srcSet={`${POSTER_START_MOBILE} 720w, ${POSTER_START} 960w`}
+            sizes="(max-width: 768px) 100vw, 960px"
+          />
+          <img
+            src={POSTER_START_FALLBACK}
+            alt={alt}
+            width={960}
+            height={540}
+            decoding="async"
+            fetchPriority="high"
+            className="absolute inset-0 h-full w-full select-none object-contain"
+            draggable={false}
+          />
+        </picture>
 
         {canPlay && src ? (
           <motion.video
             ref={videoRef}
             src={src}
-            poster={POSTER_START}
+            poster={POSTER_START_FALLBACK}
             muted
             loop
             playsInline

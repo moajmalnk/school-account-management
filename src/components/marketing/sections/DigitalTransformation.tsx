@@ -118,12 +118,18 @@ export function DigitalTransformation() {
                 viewport={{ once: true }}
                 transition={{ duration: 0.75, ease: easeOutExpo, delay: 0.2 }}
               >
-                <img
-                  src="/digital/2.png"
-                  alt={FOLLOW_UP.imageAlt}
-                  className="h-full w-auto max-w-full object-contain object-bottom drop-shadow-[0_14px_32px_rgba(0,0,0,0.14)] md:max-w-none md:object-right-bottom"
-                  decoding="async"
-                />
+                <picture>
+                  <source type="image/webp" srcSet="/digital/2.webp" />
+                  <img
+                    src="/digital/2.png"
+                    alt={FOLLOW_UP.imageAlt}
+                    width={720}
+                    height={979}
+                    className="h-full w-auto max-w-full object-contain object-bottom drop-shadow-[0_14px_32px_rgba(0,0,0,0.14)] md:max-w-none md:object-right-bottom"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </picture>
               </motion.div>
             </div>
           </motion.article>

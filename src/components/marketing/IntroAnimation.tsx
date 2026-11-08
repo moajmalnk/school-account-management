@@ -57,7 +57,7 @@ export function IntroAnimation() {
             animate={{ x: "100vw", y: "-20vh", rotateY: 45, rotateX: 45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage imgSrc="/showcase/1.jpg" />
+            <MiniPage imgSrc="/showcase/1.webp" />
           </motion.div>
           <motion.div
             className="absolute top-0 left-[33.33%] w-[33.33%] h-[33.33%]"
@@ -65,7 +65,7 @@ export function IntroAnimation() {
             animate={{ x: "50vw", y: "-50vh", rotateY: -45, rotateX: 45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage imgSrc="/showcase/2.jpg" />
+            <MiniPage imgSrc="/showcase/2.webp" />
           </motion.div>
           <motion.div
             className="absolute top-0 left-[66.66%] w-[33.33%] h-[33.33%]"
@@ -73,7 +73,7 @@ export function IntroAnimation() {
             animate={{ x: "100vw", y: "-20vh", rotateY: -60, rotateX: 45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage imgSrc="/showcase/3.jpg" />
+            <MiniPage imgSrc="/showcase/3.webp" />
           </motion.div>
 
           {/* Bottom Row (Moves Left & Tumbles in 3D) */}
@@ -83,7 +83,7 @@ export function IntroAnimation() {
             animate={{ x: "-100vw", y: "20vh", rotateY: 45, rotateX: -45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage imgSrc="/showcase/4.jpg" />
+            <MiniPage imgSrc="/showcase/4.webp" />
           </motion.div>
           <motion.div
             className="absolute bottom-0 left-[33.33%] w-[33.33%] h-[33.33%]"
@@ -91,7 +91,7 @@ export function IntroAnimation() {
             animate={{ x: "-50vw", y: "50vh", rotateY: 45, rotateX: -45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage imgSrc="/showcase/5.jpg" />
+            <MiniPage imgSrc="/showcase/5.webp" />
           </motion.div>
           <motion.div
             className="absolute bottom-0 left-[66.66%] w-[33.33%] h-[33.33%]"
@@ -99,7 +99,7 @@ export function IntroAnimation() {
             animate={{ x: "-100vw", y: "20vh", rotateY: -45, rotateX: -45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage imgSrc="/showcase/1.jpg" />
+            <MiniPage imgSrc="/showcase/1.webp" />
           </motion.div>
 
           {/* Middle Left (Moves Left & Tumbles) */}
@@ -109,7 +109,7 @@ export function IntroAnimation() {
             animate={{ x: "-100vw", rotateY: 60, rotateX: 0 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage imgSrc="/showcase/2.jpg" />
+            <MiniPage imgSrc="/showcase/2.webp" />
           </motion.div>
 
           {/* Middle Right (Moves Right & Tumbles) */}
@@ -119,7 +119,7 @@ export function IntroAnimation() {
             animate={{ x: "100vw", rotateY: -60, rotateX: 0 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage imgSrc="/showcase/3.jpg" />
+            <MiniPage imgSrc="/showcase/3.webp" />
           </motion.div>
 
           {/* Center piece (Expands & Zooms from 3D) */}

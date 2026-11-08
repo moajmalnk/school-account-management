@@ -211,13 +211,13 @@ function ShowcaseStrip() {
               <img
                 src={item.image}
                 alt={item.alt}
-                width={1080}
-                height={1920}
+                width={540}
+                height={960}
                 className="h-full w-full object-cover object-top"
-                loading={index < 2 ? "eager" : "lazy"}
+                loading="lazy"
                 decoding="async"
                 draggable={false}
-                fetchPriority={index === 0 ? "high" : "auto"}
+                fetchPriority="low"
               />
             </div>
             <figcaption className="sr-only">

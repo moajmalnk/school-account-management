@@ -52,7 +52,7 @@ export const MARKETING = {
     items: [
       {
         id: "fees-accounts",
-        image: "/showcase/1.jpg",
+        image: "/showcase/1.webp",
         alt: "Feezo mobile dashboard for school fees and accounts",
         eyebrow: "Dashboard",
         headline: "Manage school fees & accounts in one place",
@@ -67,7 +67,7 @@ export const MARKETING = {
       },
       {
         id: "students",
-        image: "/showcase/2.jpg",
+        image: "/showcase/2.webp",
         alt: "Feezo students directory with fee status on mobile",
         eyebrow: "Students",
         headline: "Manage every student’s fees easily",
@@ -80,7 +80,7 @@ export const MARKETING = {
       },
       {
         id: "payments",
-        image: "/showcase/3.jpg",
+        image: "/showcase/3.webp",
         alt: "Feezo payment recording and receipt tracking on mobile",
         eyebrow: "Payments",
         headline: "Record payments with ease",
@@ -93,7 +93,7 @@ export const MARKETING = {
       },
       {
         id: "pending",
-        image: "/showcase/4.jpg",
+        image: "/showcase/4.webp",
         alt: "Feezo reports and pending fee follow-up on mobile",
         eyebrow: "Follow-up",
         headline: "Never lose track of pending fees",
@@ -106,7 +106,7 @@ export const MARKETING = {
       },
       {
         id: "finances",
-        image: "/showcase/5.jpg",
+        image: "/showcase/5.webp",
         alt: "Feezo financial management and analytics on mobile",
         eyebrow: "Reports",
         headline: "Understand your school’s finances",

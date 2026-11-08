@@ -1,19 +1,12 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script async src="https://www.googletagmanager.com/gtm.js?id=GTM-P8CZ33ZN"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
       content="School accounts simplified — fees, receipts, reports in one place. Start a 14-day trial with Feezo Edu Books."
     />
-    
     <meta name="theme-color" content="#8FCA4A" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -34,28 +27,71 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="mask-icon" href="/favicon.svg" color="#0F766E" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <script>
-      (function () {
-        var path = location.pathname;
-        if (path !== "/" && path !== "/index.html") return;
-        try {
-          if (localStorage.getItem("school-accounts/api-token/v1")) return;
-        } catch (e) {}
-        var link = document.createElement("link");
-        link.rel = "preload";
-        link.as = "image";
-        link.href = "/home/home.png";
-        link.type = "image/png";
-        link.fetchPriority = "high";
-        document.head.appendChild(link);
-      })();
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <style>
+      html,body{margin:0;background:#fff;color:#0f172a;font-family:Inter,ui-sans-serif,system-ui,sans-serif}
+      #root{min-height:100vh}
+    </style>
+    <link rel="preload" as="image" href="/home/explode-start-720.webp" type="image/webp" fetchpriority="high" />
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
     />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+      />
+    </noscript>
+    <script>
+      (function () {
+        function loadExtraFonts() {
+          var link = document.createElement("link");
+          link.rel = "stylesheet";
+          link.href =
+            "https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=JetBrains+Mono:wght@400;500;600&display=swap";
+          document.head.appendChild(link);
+        }
+        if ("requestIdleCallback" in window) {
+          requestIdleCallback(loadExtraFonts, { timeout: 4000 });
+        } else {
+          window.addEventListener("load", function () {
+            setTimeout(loadExtraFonts, 1200);
+          });
+        }
+      })();
+    </script>
+    <script>
+      (function () {
+        function loadGtm() {
+          window.dataLayer = window.dataLayer || [];
+          function gtag() {
+            dataLayer.push(arguments);
+          }
+          window.gtag = gtag;
+          gtag("js", new Date());
+          var s = document.createElement("script");
+          s.async = true;
+          s.src = "https://www.googletagmanager.com/gtm.js?id=GTM-P8CZ33ZN";
+          document.head.appendChild(s);
+        }
+        if (document.readyState === "complete") {
+          setTimeout(loadGtm, 1500);
+        } else {
+          window.addEventListener("load", function () {
+            setTimeout(loadGtm, 1500);
+          });
+        }
+      })();
+    </script>
   </head>
   <body class="bg-white antialiased">
     <div id="root"></div>
