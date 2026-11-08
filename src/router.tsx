@@ -1,7 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 
-import { WorkspaceOpeningScreen } from "@/components/school/TenantDirectorySkeleton";
 import "./file-routes";
 import { routeTree } from "./routeTree.gen";
 
@@ -19,15 +18,12 @@ export const router = createRouter({
   context: { queryClient },
   scrollRestoration: true,
   defaultPreloadStaleTime: 0,
-  /** Show opening UI immediately while route chunks (SchoolAdminWorkspace) load. */
-  defaultPendingMs: 0,
-  defaultPendingMinMs: 180,
-  defaultPendingComponent: () => (
-    <WorkspaceOpeningScreen
-      label="Opening workspace"
-      detail="Loading this section…"
-    />
-  ),
+  /**
+   * Do not flash the workspace skeleton on marketing pages — that wipes the
+   * early HTML hero and tanks LCP. Tenant routes set their own pending UI.
+   */
+  defaultPendingMs: 1000,
+  defaultPendingMinMs: 0,
 });
 
 declare module "@tanstack/react-router" {
