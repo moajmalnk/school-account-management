@@ -21,7 +21,7 @@ export function AppDownloadQr({ className }: { className?: string }) {
         className,
       )}
     >
-      <div className="flex w-[118px] flex-col items-center rounded-[14px] bg-[#7D9F8C] px-3 pb-3 pt-3.5 shadow-[0_12px_32px_-12px_rgba(20,50,40,0.45)] sm:w-[128px] sm:rounded-2xl sm:px-3.5 sm:pb-3.5 sm:pt-4">
+      <div className="flex w-[118px] flex-col items-center rounded-[14px] bg-[#4A6F5C] px-3 pb-3 pt-3.5 shadow-[0_12px_32px_-12px_rgba(20,50,40,0.45)] sm:w-[128px] sm:rounded-2xl sm:px-3.5 sm:pb-3.5 sm:pt-4">
         <p className="mb-2.5 text-center text-[11px] font-medium leading-[1.25] tracking-[-0.01em] text-white sm:text-[12px]">
           Scan to
           <br />
