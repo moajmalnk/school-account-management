@@ -56,6 +56,10 @@ export function MarketingLanding() {
     const meta = document.querySelector('meta[name="description"]');
     if (meta) meta.setAttribute("content", MARKETING.description);
     preloadMarketingSections();
+    const dismiss = (window as Window & { __feezoDismissBootShell?: () => void })
+      .__feezoDismissBootShell;
+    const timer = window.setTimeout(() => dismiss?.(), 80);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
