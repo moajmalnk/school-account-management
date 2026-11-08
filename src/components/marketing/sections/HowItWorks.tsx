@@ -92,7 +92,7 @@ function ShowcaseStrip() {
     };
     // Read all geometry in this same frame (scheduled via rAF) — no interleaved writes.
     offsetsRef.current = Array.from(el.querySelectorAll<HTMLElement>("[data-shot]")).map((card) =>
-      Math.max(0, card.offsetLeft - el.scrollLeft - 20),
+      Math.max(0, card.offsetLeft - 20),
     );
   }, []);
 
