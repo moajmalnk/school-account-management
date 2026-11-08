@@ -160,7 +160,8 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: "dist",
       emptyOutDir: true,
-      sourcemap: false,
+      // Publish maps so Lighthouse/devtools can attribute production JS.
+      sourcemap: true,
       rollupOptions: {
         output: {
           manualChunks: {
