@@ -44,6 +44,7 @@ import {
   type FontFamilyOption,
   type FontSizeOption,
 } from "@/lib/brand-theme";
+import { applyWorkspaceThemeMode } from "@/lib/workspace-theme";
 import {
   clearActiveFileNames,
   DEFAULT_FILE_NAMES,
