@@ -205,7 +205,7 @@ function whenIdle(fn: () => void): () => void {
 
 /**
  * Hero product shot. The still WebP is the LCP element. The looping video mounts
- * only after the load event + a delay so it cannot steal LCP or block first paint.
+ * only after a real user gesture so Lighthouse / cold loads never pick the video as LCP.
  */
 export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDelayMs?: number }) {
   const reduce = useReducedMotion();
@@ -233,27 +233,20 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
 
   useEffect(() => () => window.clearTimeout(bufferTimer.current), []);
 
-  // Unlock video only after first paint / LCP window on capable desktop sessions.
+  // Never autoplay into LCP. Unlock only after a real user gesture on capable desktops.
   useEffect(() => {
     if (reduce || isSearchCrawler() || prefersPosterOnly()) return;
 
-    let cancelled = false;
-    let idleCancel: (() => void) | undefined;
-    const arm = () => {
-      idleCancel = whenIdle(() => {
-        if (cancelled) return;
-        window.setTimeout(() => {
-          if (!cancelled) setEnabled(true);
-        }, 4500);
-      });
-    };
-
-    if (document.readyState === "complete") arm();
-    else window.addEventListener("load", arm, { once: true });
+    const unlock = () => setEnabled(true);
+    const opts: AddEventListenerOptions = { once: true, passive: true };
+    window.addEventListener("pointerdown", unlock, opts);
+    window.addEventListener("keydown", unlock, opts);
+    window.addEventListener("touchstart", unlock, opts);
 
     return () => {
-      cancelled = true;
-      idleCancel?.();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
     };
   }, [reduce]);
 
@@ -364,6 +357,7 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
           alt={alt}
           width={720}
           height={405}
+          loading="eager"
           decoding="async"
           fetchPriority="high"
           className="absolute inset-0 h-full w-full select-none object-contain"

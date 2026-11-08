@@ -98,9 +98,10 @@ export function MarketingLanding() {
     const meta = document.querySelector('meta[name="description"]');
     if (meta) meta.setAttribute("content", MARKETING.description);
     preloadMarketingSections();
+    // Keep the HTML hero visible long enough for LCP discovery, then hand off to React.
     const dismiss = (window as Window & { __feezoDismissBootShell?: () => void })
       .__feezoDismissBootShell;
-    const timer = window.setTimeout(() => dismiss?.(), 80);
+    const timer = window.setTimeout(() => dismiss?.(), 1200);
     return () => window.clearTimeout(timer);
   }, []);
 
