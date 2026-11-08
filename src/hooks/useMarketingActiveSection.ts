@@ -6,57 +6,9 @@ export type MarketingSectionId = (typeof MARKETING.nav)[number]["id"];
 
 const SECTION_IDS = MARKETING.nav.map((item) => item.id);
 
-function getMarketingHeaderOffset(): number {
-  const header = document.querySelector<HTMLElement>(".marketing-header");
-  if (!header) return 88;
-  return Math.ceil(header.getBoundingClientRect().height) + 8;
-}
-
 function readHashSection(): MarketingSectionId | null {
   const hash = window.location.hash.replace(/^#/, "");
   return SECTION_IDS.includes(hash as MarketingSectionId) ? (hash as MarketingSectionId) : null;
-}
-
-function readScrollSection(): MarketingSectionId | null {
-  const offset = getMarketingHeaderOffset() + 32;
-  const scrollPos = window.scrollY + offset;
-
-  const sections = SECTION_IDS.map((id) => {
-    const el = document.getElementById(id);
-    if (!el) return null;
-    return {
-      id,
-      top: el.getBoundingClientRect().top + window.scrollY,
-    };
-  })
-    .filter((section): section is { id: MarketingSectionId; top: number } => section !== null)
-    .sort((a, b) => a.top - b.top);
-
-  let current: MarketingSectionId | null = null;
-  for (const section of sections) {
-    if (section.top <= scrollPos) {
-      current = section.id;
-    } else {
-      break;
-    }
-  }
-
-  return current;
-}
-
-function resolveActiveSection(): MarketingSectionId | null {
-  const fromHash = readHashSection();
-  const fromScroll = readScrollSection();
-  if (fromScroll && fromHash && fromScroll !== fromHash) {
-    // Prefer hash while the page is still scrolling to the requested anchor.
-    const el = document.getElementById(fromHash);
-    if (el) {
-      const targetTop = el.getBoundingClientRect().top + window.scrollY;
-      const distance = Math.abs(window.scrollY + getMarketingHeaderOffset() - targetTop);
-      if (distance > 48) return fromHash;
-    }
-  }
-  return fromScroll ?? fromHash;
 }
 
 /** Tracks which landing-page section is active for nav highlighting. */
@@ -64,36 +16,62 @@ export function useMarketingActiveSection(): MarketingSectionId | null {
   const [activeSection, setActiveSection] = useState<MarketingSectionId | null>(null);
 
   useEffect(() => {
-    const update = () => {
-      setActiveSection(resolveActiveSection());
+    const ratios = new Map<MarketingSectionId, number>();
+
+    const pickActive = () => {
+      const fromHash = readHashSection();
+      let bestId: MarketingSectionId | null = null;
+      let bestRatio = 0;
+      for (const id of SECTION_IDS) {
+        const ratio = ratios.get(id) ?? 0;
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          bestId = id;
+        }
+      }
+      setActiveSection(bestId ?? fromHash);
     };
 
+    const io =
+      typeof IntersectionObserver !== "undefined"
+        ? new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) {
+                const id = entry.target.id as MarketingSectionId;
+                if (!SECTION_IDS.includes(id)) continue;
+                ratios.set(id, entry.isIntersecting ? entry.intersectionRatio : 0);
+              }
+              pickActive();
+            },
+            {
+              // Approximate sticky header without measuring it every scroll.
+              rootMargin: "-88px 0px -55% 0px",
+              threshold: [0, 0.25, 0.5, 0.75, 1],
+            },
+          )
+        : null;
+
+    for (const id of SECTION_IDS) {
+      const el = document.getElementById(id);
+      if (el) io?.observe(el);
+    }
+
+    const onHash = () => {
+      setActiveSection((current) => readHashSection() ?? current);
+    };
     const onNavigate = (event: Event) => {
       const sectionId = (event as CustomEvent<MarketingSectionId | undefined>).detail;
-      if (sectionId) {
-        setActiveSection(sectionId);
-        return;
-      }
-      update();
+      if (sectionId) setActiveSection(sectionId);
     };
 
-    update();
-
-    window.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("hashchange", update);
-    window.addEventListener("resize", update);
+    setActiveSection(readHashSection());
+    window.addEventListener("hashchange", onHash);
     window.addEventListener("marketing-section-navigate", onNavigate);
 
-    const interval = window.setInterval(update, 400);
-    const stop = window.setTimeout(() => window.clearInterval(interval), 10_000);
-
     return () => {
-      window.removeEventListener("scroll", update);
-      window.removeEventListener("hashchange", update);
-      window.removeEventListener("resize", update);
+      io?.disconnect();
+      window.removeEventListener("hashchange", onHash);
       window.removeEventListener("marketing-section-navigate", onNavigate);
-      window.clearInterval(interval);
-      window.clearTimeout(stop);
     };
   }, []);
 

@@ -72,72 +72,87 @@ function ShowcaseStrip() {
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(true);
   const [active, setActive] = useState(0);
+  const activeRef = useRef(0);
+  const rafRef = useRef(0);
   const total = showcase.items.length;
 
-  const sync = useCallback(() => {
+  const syncEdges = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
-
     const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
-    setCanPrev(el.scrollLeft > 6);
-    setCanNext(el.scrollLeft < maxScroll - 6);
-
-    const cards = Array.from(el.querySelectorAll<HTMLElement>("[data-shot]"));
-    if (!cards.length) return;
-
-    const scrollerBox = el.getBoundingClientRect();
-    // Prefer the card closest to the left padding edge (App Store primary shot)
-    const targetX = scrollerBox.left + 20;
-    let best = 0;
-    let bestDist = Infinity;
-
-    cards.forEach((card, i) => {
-      const box = card.getBoundingClientRect();
-      const dist = Math.abs(box.left - targetX);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = i;
-      }
-    });
-
-    // At end of strip, lock to last shot
+    const nextPrev = el.scrollLeft > 6;
+    const nextNext = el.scrollLeft < maxScroll - 6;
+    setCanPrev((prev) => (prev === nextPrev ? prev : nextPrev));
+    setCanNext((prev) => (prev === nextNext ? prev : nextNext));
     if (maxScroll > 0 && el.scrollLeft >= maxScroll - 12) {
-      best = cards.length - 1;
+      const last = total - 1;
+      if (activeRef.current !== last) {
+        activeRef.current = last;
+        setActive(last);
+      }
     }
-
-    setActive(best);
-  }, []);
+  }, [total]);
 
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
-    sync();
-    el.addEventListener("scroll", sync, { passive: true });
-    window.addEventListener("resize", sync);
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
-    ro?.observe(el);
-    return () => {
-      el.removeEventListener("scroll", sync);
-      window.removeEventListener("resize", sync);
-      ro?.disconnect();
+
+    const onScroll = () => {
+      if (rafRef.current) return;
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = 0;
+        syncEdges();
+      });
     };
-  }, [sync]);
+
+    syncEdges();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+
+    const cards = Array.from(el.querySelectorAll<HTMLElement>("[data-shot]"));
+    const io =
+      typeof IntersectionObserver !== "undefined"
+        ? new IntersectionObserver(
+            (entries) => {
+              let best: { index: number; ratio: number } | null = null;
+              for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                const index = Number((entry.target as HTMLElement).dataset.index ?? "-1");
+                if (index < 0) continue;
+                if (!best || entry.intersectionRatio > best.ratio) {
+                  best = { index, ratio: entry.intersectionRatio };
+                }
+              }
+              if (!best) return;
+              if (activeRef.current === best.index) return;
+              activeRef.current = best.index;
+              setActive(best.index);
+            },
+            { root: el, threshold: [0.45, 0.6, 0.75] },
+          )
+        : null;
+    for (const card of cards) io?.observe(card);
+
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
+      io?.disconnect();
+    };
+  }, [syncEdges]);
 
   const scrollToIndex = useCallback(
     (index: number) => {
       const el = scrollerRef.current;
       if (!el) return;
-      const cards = el.querySelectorAll<HTMLElement>("[data-shot]");
-      const card = cards[Math.max(0, Math.min(index, cards.length - 1))];
+      const card = el.querySelector<HTMLElement>(`[data-shot][data-index="${index}"]`);
       if (!card) return;
-
-      const pad = Number.parseFloat(getComputedStyle(el).paddingLeft) || 0;
-      const delta =
-        card.getBoundingClientRect().left - el.getBoundingClientRect().left - pad;
+      // offsetLeft avoids getBoundingClientRect during interaction.
       el.scrollTo({
-        left: Math.max(0, el.scrollLeft + delta),
+        left: Math.max(0, card.offsetLeft - 20),
         behavior: reduce ? "auto" : "smooth",
       });
+      activeRef.current = index;
       setActive(index);
     },
     [reduce],

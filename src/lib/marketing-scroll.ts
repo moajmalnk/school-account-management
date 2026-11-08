@@ -6,18 +6,25 @@ import {
 } from "@/hooks/useMarketingActiveSection";
 import { router } from "@/router";
 
-/** Read live marketing header height for anchor scroll offset. */
+let cachedHeaderOffset = 88;
+let headerOffsetCachedAt = 0;
+
+/** Read marketing header height sparingly — avoid forced reflow on every click. */
 function getMarketingHeaderOffset(): number {
+  const now = Date.now();
+  if (now - headerOffsetCachedAt < 1000) return cachedHeaderOffset;
   const header = document.querySelector<HTMLElement>(".marketing-header");
-  if (!header) return 88;
-  return Math.ceil(header.getBoundingClientRect().height) + 8;
+  if (!header) return cachedHeaderOffset;
+  cachedHeaderOffset = Math.ceil(header.offsetHeight) + 8;
+  headerOffsetCachedAt = now;
+  return cachedHeaderOffset;
 }
 
 function scrollToElement(sectionId: string): boolean {
   const el = document.getElementById(sectionId);
   if (!el) return false;
 
-  const top = el.getBoundingClientRect().top + window.scrollY - getMarketingHeaderOffset();
+  const top = el.offsetTop - getMarketingHeaderOffset();
   window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
   window.history.replaceState(null, "", `#${sectionId}`);
   notifyMarketingSectionChange(sectionId as MarketingSectionId);
