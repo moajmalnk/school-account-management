@@ -645,18 +645,25 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
           />
         </FormField>
         <FormField id="contact-phone" label="Phone / WhatsApp" required error={errors.phone}>
-          <div className="flex gap-2">
+          <div className="flex min-w-0 items-stretch gap-2">
             <Select
               value={form.phoneCountry}
               onValueChange={(value) => set("phoneCountry", value)}
             >
               <SelectTrigger
                 aria-label="Country code"
-                className={cn(selectTriggerClass, "w-[7.75rem] shrink-0")}
+                className={cn(
+                  selectTriggerClass,
+                  "w-[7.25rem] shrink-0 grow-0 gap-1 px-2.5 tabular-nums [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>span]:text-left",
+                )}
               >
-                <SelectValue />
+                <SelectValue placeholder="+91" />
               </SelectTrigger>
-              <SelectContent className={selectContentClass} position="popper" align="start">
+              <SelectContent
+                className={cn(selectContentClass, "min-w-[10rem]")}
+                position="popper"
+                align="start"
+              >
                 {PHONE_COUNTRY_CODES.map((c) => (
                   <SelectItem key={c.code} value={c.code} className={selectItemClass}>
                     {c.label}
@@ -670,7 +677,11 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
               type="tel"
               inputMode="tel"
               autoComplete="tel-national"
-              className={cn(inputClass, errors.phone ? "border-red-300" : "border-[var(--mkt-line)]")}
+              className={cn(
+                inputClass,
+                "min-w-0 flex-1",
+                errors.phone ? "border-red-300" : "border-[var(--mkt-line)]",
+              )}
               placeholder="98765 43210"
               value={form.phone}
               maxLength={15}
