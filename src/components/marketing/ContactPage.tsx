@@ -403,7 +403,6 @@ type FormState = {
   phoneCountry: string;
   phone: string;
   school: string;
-  cityCountry: string;
   instituteType: InstituteType;
   message: string;
   website: string;
@@ -438,7 +437,6 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
     phoneCountry: "+91",
     phone: "",
     school: session?.tenantName ?? "",
-    cityCountry: "",
     instituteType: "school",
     message: "",
     website: "",
@@ -461,7 +459,7 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
         `Hi Feezo team — ${topicLabel}.`,
         form.name && `Name: ${form.name}`,
         form.school && `School: ${form.school}`,
-        form.cityCountry && `City/Country: ${form.cityCountry}`,
+        form.instituteType && `Institute: ${form.instituteType}`,
         form.message,
       ]
         .filter(Boolean)
@@ -479,9 +477,8 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
     else if (!/^\d{6,15}$/.test(form.phone.replace(/[^\d]/g, ""))) {
       e.phone = "Enter a valid phone number";
     }
-    if (!form.cityCountry.trim()) e.cityCountry = "Enter city / country";
     setErrors(e);
-    const first = (["name", "school", "email", "phone", "cityCountry"] as const).find((k) => e[k]);
+    const first = (["name", "school", "email", "phone"] as const).find((k) => e[k]);
     if (first) {
       document.getElementById(`contact-${first}`)?.focus();
       return;
@@ -496,11 +493,8 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
         email: form.email.trim().toLowerCase(),
         phone: composePhone(form.phoneCountry, form.phone) || undefined,
         school: form.school.trim() || undefined,
-        cityCountry: form.cityCountry.trim() || undefined,
         instituteType: form.instituteType,
-        message:
-          form.message.trim() ||
-          `Demo / trial request · ${form.instituteType} · ${form.cityCountry.trim()}`,
+        message: form.message.trim() || `Demo / trial request · ${form.instituteType}`,
         website: form.website,
         elapsedMs: Date.now() - startedAt.current,
         page: typeof window !== "undefined" ? window.location.pathname : undefined,
@@ -629,6 +623,26 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
             onChange={(e) => set("school", e.target.value)}
           />
         </FormField>
+        <FormField id="contact-instituteType" label="Institute type" required>
+          <Select
+            value={form.instituteType}
+            onValueChange={(value) => set("instituteType", value as InstituteType)}
+          >
+            <SelectTrigger
+              id="contact-instituteType"
+              className={cn(selectTriggerClass, "w-full")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className={selectContentClass} position="popper">
+              {INSTITUTE_TYPES.map((t) => (
+                <SelectItem key={t.id} value={t.id} className={selectItemClass}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FormField>
         <FormField id="contact-email" label="Email" required error={errors.email}>
           <input
             id="contact-email"
@@ -644,8 +658,14 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
             onChange={(e) => set("email", e.target.value)}
           />
         </FormField>
-        <FormField id="contact-phone" label="Phone / WhatsApp" required error={errors.phone}>
-          <div className="flex min-w-0 items-stretch gap-2">
+        <FormField
+          id="contact-phone"
+          label="Phone / WhatsApp"
+          required
+          error={errors.phone}
+          className="sm:col-span-2"
+        >
+          <div className="flex w-full min-w-0 items-stretch gap-2">
             <Select
               value={form.phoneCountry}
               onValueChange={(value) => set("phoneCountry", value)}
@@ -654,7 +674,7 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
                 aria-label="Country code"
                 className={cn(
                   selectTriggerClass,
-                  "w-[7.25rem] shrink-0 grow-0 gap-1 px-2.5 tabular-nums [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>span]:text-left",
+                  "w-[6.75rem] max-w-[6.75rem] shrink-0 grow-0 gap-1 px-2.5 tabular-nums [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>span]:text-left",
                 )}
               >
                 <SelectValue placeholder="+91" />
@@ -679,7 +699,7 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
               autoComplete="tel-national"
               className={cn(
                 inputClass,
-                "min-w-0 flex-1",
+                "w-auto min-w-0 flex-1 basis-0 px-3 tracking-wide tabular-nums sm:px-4",
                 errors.phone ? "border-red-300" : "border-[var(--mkt-line)]",
               )}
               placeholder="98765 43210"
@@ -688,41 +708,6 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
               onChange={(e) => set("phone", e.target.value)}
             />
           </div>
-        </FormField>
-        <FormField id="contact-cityCountry" label="City / country" required error={errors.cityCountry}>
-          <input
-            id="contact-cityCountry"
-            name="cityCountry"
-            autoComplete="address-level2"
-            className={cn(
-              inputClass,
-              errors.cityCountry ? "border-red-300" : "border-[var(--mkt-line)]",
-            )}
-            placeholder="Malappuram, India"
-            value={form.cityCountry}
-            maxLength={120}
-            onChange={(e) => set("cityCountry", e.target.value)}
-          />
-        </FormField>
-        <FormField id="contact-instituteType" label="Institute type" required>
-          <Select
-            value={form.instituteType}
-            onValueChange={(value) => set("instituteType", value as InstituteType)}
-          >
-            <SelectTrigger
-              id="contact-instituteType"
-              className={cn(selectTriggerClass, "w-full")}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className={selectContentClass} position="popper">
-              {INSTITUTE_TYPES.map((t) => (
-                <SelectItem key={t.id} value={t.id} className={selectItemClass}>
-                  {t.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </FormField>
       </div>
 
@@ -786,7 +771,6 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
           <a href={BRAND.legal.privacyPath} className="underline hover:text-[var(--mkt-ink)]">
             Privacy Policy
           </a>
-          . We never share your details.
         </p>
         <button
           type="submit"
@@ -813,16 +797,18 @@ function FormField({
   label,
   required,
   error,
+  className,
   children,
 }: {
   id: string;
   label: string;
   required?: boolean;
   error?: string;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="min-w-0">
+    <div className={cn("min-w-0", className)}>
       <label
         htmlFor={id}
         className="mb-1.5 block text-[12.5px] font-semibold text-[var(--mkt-ink)]/80"

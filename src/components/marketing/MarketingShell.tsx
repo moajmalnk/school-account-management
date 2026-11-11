@@ -34,7 +34,7 @@ export function MarketingShell({
 
   return (
     <div
-      className="marketing-root min-h-dvh scroll-smooth bg-white flex flex-col antialiased"
+      className="marketing-root flex min-h-dvh w-full max-w-[100vw] flex-col overflow-x-clip scroll-smooth bg-white antialiased"
       style={MARKETING_THEME_VARS}
     >
       <a
@@ -123,8 +123,10 @@ export function MarketingShell({
         className="marketing-header-spacer shrink-0 h-[calc(3.5rem+env(safe-area-inset-top,0px))] sm:h-[calc(4rem+env(safe-area-inset-top,0px))]"
       />
 
-      <div className="flex-1 bg-white overflow-x-hidden flex flex-col relative text-[var(--mkt-ink)]">
-        <main id="main">{children}</main>
+      <div className="relative flex min-w-0 w-full flex-1 flex-col overflow-x-clip bg-white text-[var(--mkt-ink)]">
+        <main id="main" className="min-w-0 w-full">
+          {children}
+        </main>
 
         {showFooter ? <MarketingFooter /> : null}
       </div>

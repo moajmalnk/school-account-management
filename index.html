@@ -175,10 +175,11 @@
           return;
         }
         window.__feezoDismissBootShell = function () {
-          if (!shell || shell.classList.contains("is-done")) return;
-          shell.classList.add("is-done");
+          var node = document.getElementById("boot-shell");
+          if (!node || node.classList.contains("is-done")) return;
+          node.classList.add("is-done");
           window.setTimeout(function () {
-            shell.remove();
+            node.remove();
           }, 220);
         };
       })();

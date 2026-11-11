@@ -32,7 +32,7 @@ export function DigitalTransformation() {
       className="scroll-mt-24 bg-white py-14 sm:py-20 lg:py-24"
       aria-labelledby="digital-transformation-heading"
     >
-      <div className="mx-auto w-full max-w-5xl min-w-0 px-5 sm:px-8">
+      <div className="mx-auto w-full min-w-0 max-w-6xl px-5 sm:px-8 lg:px-10">
         <h2 id="digital-transformation-heading" className="sr-only">
           Product overview
         </h2>

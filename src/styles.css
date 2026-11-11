@@ -267,7 +267,7 @@
   will-change: auto;
 }
 
-/* App Store–style showcase strip: one row, snap scroll, peek next shot */
+/* App Store–style showcase strip: centered rail, snap scroll, peek next shot */
 .mkt-showcase-strip {
   -webkit-overflow-scrolling: touch;
   scroll-padding-inline: 1.25rem;
@@ -279,10 +279,9 @@
 }
 
 .mkt-showcase-shot {
-  /* Larger shots so ~2–3 peek — forces scroll like App Store */
-  height: min(64vh, 480px);
-  width: min(72vw, calc(min(64vh, 480px) * 9 / 16));
-  max-width: 349px;
+  aspect-ratio: 9 / 16;
+  width: min(70vw, 240px);
+  height: auto;
 }
 
 @media (min-width: 640px) {
@@ -290,25 +289,13 @@
     scroll-padding-inline: 2rem;
   }
   .mkt-showcase-shot {
-    height: min(68vh, 560px);
-    width: calc(min(68vh, 560px) * 9 / 16);
-    max-width: 315px;
+    width: min(42vw, 260px);
   }
 }
 
 @media (min-width: 1024px) {
   .mkt-showcase-shot {
-    height: min(70vh, 620px);
-    width: calc(min(70vh, 620px) * 9 / 16);
-    max-width: 349px;
-  }
-}
-
-@media (max-width: 380px) {
-  .mkt-showcase-shot {
-    height: min(58vh, 400px);
-    width: min(78vw, calc(min(58vh, 400px) * 9 / 16));
-    max-width: 280px;
+    width: 280px;
   }
 }
 

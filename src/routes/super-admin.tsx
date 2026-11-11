@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/
 import { useEffect } from "react";
 
 import { ADMIN_NAV } from "@/components/admin/admin-nav";
-import { applyNoindex } from "@/lib/seo/public-pages";
+import { OverviewSkeleton } from "@/components/admin/OverviewViewSkeleton";
 import { TenantsViewSkeleton } from "@/components/admin/TenantsViewSkeleton";
 import { TopNav } from "@/components/admin/TopNav";
 import {
@@ -12,6 +12,8 @@ import {
 } from "@/components/layout/MobileTabBar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth";
+import { dismissBootShell } from "@/lib/boot-shell";
+import { applyNoindex } from "@/lib/seo/public-pages";
 
 export const Route = createFileRoute("/super-admin")({
   component: SuperAdminLayout,
@@ -62,6 +64,7 @@ function SuperAdminLayout() {
 
   useEffect(() => {
     applyNoindex();
+    dismissBootShell();
   }, []);
 
   useEffect(() => {
@@ -84,18 +87,17 @@ function SuperAdminLayout() {
         >
           {pathname.startsWith("/super-admin/tenants") ? (
             <TenantsViewSkeleton />
-          ) : (
+          ) : pathname.startsWith("/super-admin/plans") ? (
             <div className="space-y-4 sm:space-y-6">
-              <div className="space-y-3">
-                <Skeleton className="h-8 w-56 rounded-lg bg-black/[0.07]" />
-                <Skeleton className="h-3.5 w-72 max-w-full rounded-md bg-black/[0.05]" />
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="h-48 rounded-[1.75rem] bg-black/[0.05]" />
+              <Skeleton className="h-7 w-full max-w-[16rem] bg-black/[0.07] sm:h-8" />
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-[22rem] rounded-3xl bg-black/[0.06] sm:h-[28rem]" />
                 ))}
               </div>
             </div>
+          ) : (
+            <OverviewSkeleton />
           )}
         </main>
       </div>

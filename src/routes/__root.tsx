@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Outlet, Link, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
+import {
+  Outlet,
+  Link,
+  createRootRouteWithContext,
+  useRouter,
+  useRouterState,
+} from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
 
 import { DashboardPwaPrompts } from "@/components/pwa/DashboardPwaPrompts";
@@ -8,6 +14,7 @@ import {
   PublicPageFallback,
 } from "@/components/seo/PublicPageFallback";
 import { AuthProvider } from "@/lib/auth";
+import { dismissBootShell } from "@/lib/boot-shell";
 import { LocaleProvider } from "@/lib/locale/LocaleProvider";
 import { OrgCurrencyBridge } from "@/lib/locale/OrgCurrencyBridge";
 import { PwaProvider } from "@/lib/pwa";
@@ -146,6 +153,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+function BootShellGuard() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => {
+    if (pathname === "/" || pathname === "/index.html") return;
+    dismissBootShell();
+  }, [pathname]);
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -155,6 +171,7 @@ function RootComponent() {
         <LocaleProvider>
           <OrgCurrencyBridge />
           <PwaProvider>
+            <BootShellGuard />
             <Outlet />
             <DashboardPwaPrompts />
             <DeferredToaster />

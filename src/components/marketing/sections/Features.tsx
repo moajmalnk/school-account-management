@@ -31,7 +31,7 @@ const { features } = MARKETING;
 export function Features() {
   return (
     <section id="features" className="scroll-mt-24 bg-white py-14 sm:py-20 lg:py-24">
-      <div className="mx-auto max-w-5xl px-5 sm:px-8">
+      <div className="mx-auto w-full min-w-0 max-w-6xl px-5 sm:px-8 lg:px-10">
         <motion.div
           className="mb-12 text-center sm:mb-16"
           initial={{ opacity: 0, y: 24 }}

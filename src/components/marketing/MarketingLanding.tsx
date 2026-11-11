@@ -3,6 +3,7 @@ import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from "
 import { HomeLeadSection } from "@/components/marketing/HomeLeadSection";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
 import { Hero } from "@/components/marketing/sections/Hero";
+import { dismissBootShell } from "@/lib/boot-shell";
 import { importWithRetry } from "@/lib/lazy-with-retry";
 import { preloadMarketingSections, scrollToMarketingSection } from "@/lib/marketing-scroll";
 import { applyDocumentSeo, PUBLIC_PAGE_SEO } from "@/lib/seo/public-pages";
@@ -102,13 +103,15 @@ export function MarketingLanding() {
   useEffect(() => {
     applyDocumentSeo(PUBLIC_PAGE_SEO.home);
     // Keep the HTML hero visible long enough for LCP discovery, then hand off to React.
-    const dismiss = (window as Window & { __feezoDismissBootShell?: () => void })
-      .__feezoDismissBootShell;
+    // Always dismiss on unmount so navigating to the app never leaves a stuck cover.
     const timer = window.setTimeout(() => {
-      dismiss?.();
+      dismissBootShell();
       window.dispatchEvent(new Event("feezo:hydrated"));
     }, 1200);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      dismissBootShell();
+    };
   }, []);
 
   // Keep below-the-fold JS/images off the LCP/FCP network until the hero has painted.

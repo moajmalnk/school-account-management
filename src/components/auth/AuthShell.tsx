@@ -140,11 +140,11 @@ function HeroBlock({ compact }: { compact?: boolean }) {
           )}
         >
           <img
-            src="/auth/login-hero.png?v=8"
+            src="/auth/login-hero.jpg?v=9"
             alt="Students collaborating on a laptop with school books and campus"
             className="pointer-events-none h-full w-full select-none object-cover object-[68%_42%]"
-            width={1226}
-            height={693}
+            width={1280}
+            height={720}
             decoding="async"
             fetchPriority="low"
           />
@@ -160,11 +160,11 @@ function HeroBlock({ compact }: { compact?: boolean }) {
         className="pointer-events-none absolute -inset-[6%] -z-0 rounded-[46%] bg-[radial-gradient(ellipse_at_55%_60%,_#D8F3EA_0%,_#E8F8F2_38%,_transparent_70%)] blur-[2px]"
       />
       <img
-        src="/auth/login-hero.png?v=8"
+        src="/auth/login-hero.jpg?v=9"
         alt="Students collaborating on a laptop with school books and campus"
         className="pointer-events-none relative z-[1] h-auto w-full max-w-none origin-bottom-left select-none object-contain object-left-bottom drop-shadow-[0_18px_40px_rgba(15,80,60,0.08)] max-h-[300px] lg:max-h-[360px] lg:scale-[1.1] xl:max-h-[410px]"
-        width={1226}
-        height={693}
+        width={1280}
+        height={720}
         decoding="async"
         fetchPriority="high"
       />

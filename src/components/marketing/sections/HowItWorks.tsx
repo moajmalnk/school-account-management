@@ -140,10 +140,16 @@ function ShowcaseStrip() {
       const clamped = Math.max(0, Math.min(total - 1, index));
       const card = el.querySelector<HTMLElement>(`[data-shot][data-index="${clamped}"]`);
       window.requestAnimationFrame(() => {
-        el.scrollTo({
-          left: card ? Math.max(0, card.offsetLeft - 20) : 0,
-          behavior: reduce ? "auto" : "smooth",
-        });
+        if (card) {
+          const left = Math.max(
+            0,
+            card.offsetLeft - Math.max(0, (el.clientWidth - card.offsetWidth) / 2),
+          );
+          el.scrollTo({
+            left,
+            behavior: reduce ? "auto" : "smooth",
+          });
+        }
         syncEdges();
       });
       activeRef.current = clamped;
@@ -157,17 +163,17 @@ function ShowcaseStrip() {
   };
 
   return (
-    <div className="relative mt-10 w-full min-w-0 max-w-[100%] sm:mt-12 lg:mt-14">
+    <div className="relative mx-auto mt-10 w-full min-w-0 max-w-6xl sm:mt-12 lg:mt-14">
       <div
         className={cn(
-          "pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-[#fafdf7] to-transparent transition-opacity sm:w-14",
+          "pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-[#fafdf7] to-transparent transition-opacity sm:w-12",
           canPrev ? "opacity-100" : "opacity-0",
         )}
         aria-hidden
       />
       <div
         className={cn(
-          "pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[#fafdf7] to-transparent transition-opacity sm:w-14",
+          "pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[#fafdf7] to-transparent transition-opacity sm:w-12",
           canNext ? "opacity-100" : "opacity-0",
         )}
         aria-hidden
@@ -179,7 +185,7 @@ function ShowcaseStrip() {
         disabled={!canPrev}
         aria-label="Previous screenshot"
         className={cn(
-          "absolute left-2 top-[42%] z-20 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-[var(--mkt-line)] bg-white/95 text-[var(--mkt-ink)] shadow-md backdrop-blur-sm transition enabled:hover:scale-105 enabled:hover:bg-white md:grid",
+          "absolute left-1 top-[42%] z-20 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-[var(--mkt-line)] bg-white/95 text-[var(--mkt-ink)] shadow-md backdrop-blur-sm transition enabled:hover:scale-105 enabled:hover:bg-white md:grid lg:left-2",
           !canPrev && "pointer-events-none opacity-0",
         )}
       >
@@ -191,7 +197,7 @@ function ShowcaseStrip() {
         disabled={!canNext}
         aria-label="Next screenshot"
         className={cn(
-          "absolute right-2 top-[42%] z-20 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-[var(--mkt-line)] bg-white/95 text-[var(--mkt-ink)] shadow-md backdrop-blur-sm transition enabled:hover:scale-105 enabled:hover:bg-white md:grid",
+          "absolute right-1 top-[42%] z-20 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-[var(--mkt-line)] bg-white/95 text-[var(--mkt-ink)] shadow-md backdrop-blur-sm transition enabled:hover:scale-105 enabled:hover:bg-white md:grid lg:right-2",
           !canNext && "pointer-events-none opacity-0",
         )}
       >
@@ -200,7 +206,7 @@ function ShowcaseStrip() {
 
       <ul
         ref={scrollerRef}
-        className="mkt-showcase-strip flex w-full min-w-0 list-none snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-5 pb-2 pt-1 sm:gap-4 sm:px-8 lg:px-10"
+        className="mkt-showcase-strip flex w-full min-w-0 list-none snap-x snap-mandatory justify-start gap-3 overflow-x-auto overscroll-x-contain px-5 pb-2 pt-1 sm:gap-4 sm:px-8 lg:px-10"
         aria-label="App screenshots"
       >
         {showcase.items.map((item, index) => (
@@ -208,9 +214,9 @@ function ShowcaseStrip() {
             key={item.id}
             data-shot
             data-index={index}
-            className="mkt-showcase-shot relative shrink-0 snap-start"
+            className="mkt-showcase-shot relative shrink-0 snap-center sm:snap-start"
           >
-            <figure className="m-0 h-full">
+            <figure className="m-0 h-full w-full">
               <div className="h-full overflow-hidden rounded-[1.15rem] bg-white shadow-[0_18px_48px_-28px_rgba(26,28,44,0.45)] ring-1 ring-black/[0.05] sm:rounded-[1.35rem]">
                 <img
                   src={item.image.replace(/\.webp$/, "-360.webp")}
@@ -218,7 +224,7 @@ function ShowcaseStrip() {
                   alt={item.alt}
                   width={360}
                   height={640}
-                  sizes="(max-width: 640px) 72vw, 349px"
+                  sizes="(max-width: 640px) 70vw, 280px"
                   className="h-full w-full object-cover object-top"
                   loading="lazy"
                   decoding="async"
@@ -232,11 +238,9 @@ function ShowcaseStrip() {
             </figure>
           </li>
         ))}
-        {/* End spacer — lets last card snap fully into view */}
-        <li className="w-5 shrink-0 list-none sm:w-8 lg:w-10" aria-hidden />
+        <li className="w-2 shrink-0 list-none sm:w-4" aria-hidden />
       </ul>
 
-      {/* Page dots — 48×48 targets; group (not tablist) — no tabpanels here */}
       <div
         className="mt-5 flex items-center justify-center gap-1"
         role="group"
@@ -336,8 +340,8 @@ export function HowItWorks() {
         </div>
       </div>
 
-      {/* Showcase — App Store listing strip */}
-      <div className="relative mt-20 w-full min-w-0 overflow-x-clip sm:mt-24 lg:mt-28">
+      {/* Showcase — centered App Store–style strip */}
+      <div className="relative mx-auto mt-20 w-full min-w-0 max-w-6xl overflow-x-clip px-0 sm:mt-24 lg:mt-28">
         <motion.div
           className="mx-auto max-w-2xl px-5 text-center sm:px-8"
           initial={reduce ? false : { opacity: 0, y: 18 }}
