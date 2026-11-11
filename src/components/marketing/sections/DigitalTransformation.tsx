@@ -32,15 +32,15 @@ export function DigitalTransformation() {
       className="scroll-mt-24 bg-white py-14 sm:py-20 lg:py-24"
       aria-labelledby="digital-transformation-heading"
     >
-      <div className="mx-auto max-w-5xl px-5 sm:px-8">
+      <div className="mx-auto w-full max-w-5xl min-w-0 px-5 sm:px-8">
         <h2 id="digital-transformation-heading" className="sr-only">
           Product overview
         </h2>
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
+        <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
           {/* Top left — brand setup */}
           <motion.article
-            className={`${CARD} min-h-[300px] bg-white p-6 sm:min-h-[340px] sm:p-8`}
+            className={`${CARD} min-h-[300px] min-w-0 bg-white p-6 sm:min-h-[340px] sm:p-8`}
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-60px" }}
@@ -75,24 +75,24 @@ export function DigitalTransformation() {
 
           {/* Top right — follow-up */}
           <motion.article
-            className={`${CARD} flex min-h-[300px] flex-col bg-[#f4fbf0] sm:min-h-[340px] lg:min-h-[380px]`}
+            className={`${CARD} flex min-h-[300px] min-w-0 flex-col bg-[#f4fbf0] sm:min-h-[340px]`}
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-60px" }}
             transition={{ duration: 0.65, ease: easeOutExpo, delay: 0.06 }}
           >
             <MintGlow position="top-right" />
-            <div className="relative z-10 flex min-h-0 flex-1 flex-col lg:flex-row lg:items-stretch">
-              <div className="relative z-10 flex w-full flex-col p-6 sm:p-8 lg:w-[44%] lg:shrink-0 lg:pr-3">
+            <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-6 sm:gap-5 sm:p-8">
+              <div className="relative z-10 flex w-full min-w-0 flex-col">
                 <h3 className="text-[22px] font-bold leading-[1.15] text-[var(--mkt-ink)] sm:text-[26px]">
                   One-click
                   <br />
                   follow-up
                 </h3>
-                <p className="mt-2.5 max-w-[28rem] text-[13px] leading-relaxed text-[var(--mkt-ink)] lg:max-w-none">
+                <p className="mt-2.5 max-w-[28rem] text-[13px] leading-relaxed text-[var(--mkt-ink)]">
                   {FOLLOW_UP.body}
                 </p>
-                <div className="mt-5 flex flex-col gap-2 sm:mt-6 lg:mt-auto lg:pt-4">
+                <div className="mt-5 flex flex-col gap-2 sm:mt-6">
                   {FOLLOW_UP.steps.map((label, idx) => (
                     <span
                       key={label}
@@ -112,20 +112,19 @@ export function DigitalTransformation() {
               </div>
 
               <motion.div
-                className="relative mx-auto flex h-[210px] w-full max-w-[280px] items-end justify-center overflow-hidden sm:h-[240px] sm:max-w-[300px] lg:mx-0 lg:mt-auto lg:h-auto lg:min-h-[260px] lg:max-w-none lg:flex-1 lg:justify-end lg:self-stretch"
+                className="relative mt-auto w-full min-w-0 overflow-hidden rounded-2xl bg-white/70"
                 initial={{ opacity: 0, y: 16, scale: 0.98 }}
                 whileInView={{ opacity: 1, y: 0, scale: 1 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.75, ease: easeOutExpo, delay: 0.2 }}
               >
                 <img
-                  src="/digital/2-280.webp"
-                  srcSet="/digital/2-280.webp 280w, /digital/2-360.webp 360w, /digital/2.webp 540w"
+                  src={FOLLOW_UP.image}
                   alt={FOLLOW_UP.imageAlt}
-                  width={280}
-                  height={381}
-                  sizes="(max-width: 1024px) 270px, 280px"
-                  className="h-full w-auto max-h-full max-w-full object-contain object-bottom lg:object-right-bottom"
+                  width={1024}
+                  height={858}
+                  sizes="(max-width: 768px) 100vw, 360px"
+                  className="h-auto max-h-[220px] w-full max-w-full object-cover object-center sm:max-h-[260px]"
                   loading="lazy"
                   decoding="async"
                   fetchPriority="low"
@@ -136,7 +135,7 @@ export function DigitalTransformation() {
 
           {/* Bottom left — school details */}
           <motion.article
-            className={`${CARD} flex min-h-[200px] flex-col gap-5 bg-white p-6 sm:min-h-[230px] sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:p-8`}
+            className={`${CARD} flex min-h-[200px] min-w-0 flex-col gap-5 bg-white p-6 sm:min-h-[230px] sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:p-8`}
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-60px" }}
@@ -161,7 +160,7 @@ export function DigitalTransformation() {
 
           {/* Bottom right — staff setup */}
           <motion.article
-            className={`${CARD} flex min-h-[230px] flex-col bg-white p-6 sm:min-h-[280px] sm:p-8`}
+            className={`${CARD} flex min-h-[230px] min-w-0 flex-col bg-white p-6 sm:min-h-[280px] sm:p-8`}
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-60px" }}

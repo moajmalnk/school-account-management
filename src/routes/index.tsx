@@ -1,7 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect } from "react";
-
-import { homePathForSession, useAuth } from "@/lib/auth";
+import { createFileRoute } from "@tanstack/react-router";
+import { lazy, Suspense } from "react";
 
 const MarketingLanding = lazy(() =>
   import("@/components/marketing/MarketingLanding").then((m) => ({
@@ -13,35 +11,9 @@ export const Route = createFileRoute("/")({
   component: IndexPage,
 });
 
-function OpeningWorkspace() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-white">
-      <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-black/45">
-        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-black/45" />
-        Opening workspace…
-      </div>
-    </div>
-  );
-}
-
 function IndexPage() {
-  const navigate = useNavigate();
-  const { session, hydrated } = useAuth();
-
-  useEffect(() => {
-    if (!hydrated) return;
-    if (session) {
-      navigate({ to: homePathForSession(session), replace: true });
-    }
-  }, [hydrated, session, navigate]);
-
-  // Logged-in users: hand off to workspace (no marketing flash).
-  if (session) {
-    return <OpeningWorkspace />;
-  }
-
-  // Visitors: show the landing page immediately — don't wait on auth API.
-  // Boot shell in index.html covers first paint while this chunk loads.
+  // Always show the marketing homepage. Logged-in users reach their workspace
+  // via login redirect / "My Account" — do not bounce "/" back to the app.
   return (
     <Suspense fallback={null}>
       <MarketingLanding />

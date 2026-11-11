@@ -3,7 +3,6 @@ import { ArrowRight, LayoutDashboard } from "lucide-react";
 
 import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { homePathForSession, useAuth } from "@/lib/auth";
-import { pushMarketingEvent } from "@/lib/seo/analytics";
 import { cn } from "@/lib/utils";
 
 const PRIMARY =
@@ -80,26 +79,15 @@ export function MarketingAuthActions({
           <ArrowRight className="h-4 w-4" aria-hidden />
         </TrialSignupLink>
         <Link
-          to="/contact"
+          to="/login"
           preload="intent"
-          onClick={() => {
-            pushMarketingEvent("demo_request", { cta_location: "header" });
-            onNavigate?.();
-          }}
+          onClick={onNavigate}
           className={cn(
             SECONDARY,
             "mt-3 h-11 w-full rounded-xl border border-[var(--mkt-line)] bg-white text-[14px] hover:border-[var(--mkt-green)]/40",
           )}
         >
-          Book a demo
-        </Link>
-        <Link
-          to="/login"
-          preload="intent"
-          onClick={onNavigate}
-          className={cn(SECONDARY, "mt-2 h-10 w-full text-[13px] text-[var(--mkt-muted)]")}
-        >
-          Sign in
+          Login
         </Link>
       </>
     );
@@ -108,15 +96,14 @@ export function MarketingAuthActions({
   return (
     <div className="flex items-center gap-1.5 sm:gap-2">
       <Link
-        to="/contact"
+        to="/login"
         preload="intent"
-        onClick={() => pushMarketingEvent("demo_request", { cta_location: "header" })}
         className={cn(
           SECONDARY,
           "hidden h-10 whitespace-nowrap px-3 text-[14px] xl:inline-flex 2xl:px-4",
         )}
       >
-        Book a demo
+        Login
       </Link>
       <TrialSignupLink
         ctaLocation="header"

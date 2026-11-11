@@ -157,7 +157,7 @@ function ShowcaseStrip() {
   };
 
   return (
-    <div className="relative mt-10 sm:mt-12 lg:mt-14">
+    <div className="relative mt-10 w-full min-w-0 max-w-[100%] sm:mt-12 lg:mt-14">
       <div
         className={cn(
           "pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-[#fafdf7] to-transparent transition-opacity sm:w-14",
@@ -200,7 +200,7 @@ function ShowcaseStrip() {
 
       <ul
         ref={scrollerRef}
-        className="mkt-showcase-strip flex list-none snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[max(1.25rem,calc((100vw-72rem)/2+1.25rem))] pb-2 pt-1 sm:gap-4 sm:px-[max(2rem,calc((100vw-72rem)/2+2rem))]"
+        className="mkt-showcase-strip flex w-full min-w-0 list-none snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-5 pb-2 pt-1 sm:gap-4 sm:px-8 lg:px-10"
         aria-label="App screenshots"
       >
         {showcase.items.map((item, index) => (
@@ -233,7 +233,7 @@ function ShowcaseStrip() {
           </li>
         ))}
         {/* End spacer — lets last card snap fully into view */}
-        <li className="w-[12vw] shrink-0 list-none sm:w-[18vw]" aria-hidden />
+        <li className="w-5 shrink-0 list-none sm:w-8 lg:w-10" aria-hidden />
       </ul>
 
       {/* Page dots — 48×48 targets; group (not tablist) — no tabpanels here */}
@@ -337,7 +337,7 @@ export function HowItWorks() {
       </div>
 
       {/* Showcase — App Store listing strip */}
-      <div className="relative mt-20 sm:mt-24 lg:mt-28">
+      <div className="relative mt-20 w-full min-w-0 overflow-x-clip sm:mt-24 lg:mt-28">
         <motion.div
           className="mx-auto max-w-2xl px-5 text-center sm:px-8"
           initial={reduce ? false : { opacity: 0, y: 18 }}
