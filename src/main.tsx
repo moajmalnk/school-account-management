@@ -22,3 +22,8 @@ createRoot(rootElement).render(
     <RouterProvider router={router} />
   </StrictMode>,
 );
+
+// Signal prerendered #seo-content can hide once the SPA has mounted.
+queueMicrotask(() => {
+  window.dispatchEvent(new Event("feezo:hydrated"));
+});

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ApiError, apiRequest, setImpersonationApiToken } from "@/lib/api/client";
 import { impersonateSuperAdminTenant } from "@/lib/api/super-admin";
 import { readPersistentSession, readSession, writeImpersonationSession } from "@/lib/auth";
+import { applyNoindex } from "@/lib/seo/public-pages";
 import {
   ALL_PERMISSIONS,
   firstAllowedTenantPath,
@@ -199,6 +200,10 @@ function ImpersonatePage() {
     tenant: tenantId,
   } = Route.useSearch();
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    applyNoindex();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

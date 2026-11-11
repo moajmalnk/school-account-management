@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/client";
 import { apiForgotPassword } from "@/lib/api/auth";
+import { applyNoindex } from "@/lib/seo/public-pages";
 
 export const Route = createFileRoute("/forgot-password")({
   component: ForgotPasswordPage,
@@ -19,6 +20,10 @@ function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
   const [emailed, setEmailed] = useState(false);
   const [resetUrl, setResetUrl] = useState<string | undefined>();
+
+  useEffect(() => {
+    applyNoindex();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

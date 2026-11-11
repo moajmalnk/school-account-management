@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/
 import { useEffect } from "react";
 
 import { ADMIN_NAV } from "@/components/admin/admin-nav";
+import { applyNoindex } from "@/lib/seo/public-pages";
 import { TenantsViewSkeleton } from "@/components/admin/TenantsViewSkeleton";
 import { TopNav } from "@/components/admin/TopNav";
 import {
@@ -58,6 +59,10 @@ function SuperAdminLayout() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { session, hydrated } = useAuth();
+
+  useEffect(() => {
+    applyNoindex();
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return;

@@ -1,10 +1,12 @@
 User-agent: *
 Allow: /
 Allow: /assets/
+Allow: /og/
 
 User-agent: Googlebot
 Allow: /
 Allow: /assets/
+Allow: /og/
 
 Sitemap: https://www.feezo.app/sitemap.xml
 

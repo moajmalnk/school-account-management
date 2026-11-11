@@ -27,9 +27,18 @@ import {
 } from "@/components/ui/accordion";
 import { WhatsAppIcon } from "@/components/ui/whatsapp-icon";
 import { ApiError } from "@/lib/api/client";
-import { CONTACT_TOPICS, apiSubmitContact, type ContactTopic } from "@/lib/api/contact";
+import {
+  CONTACT_TOPICS,
+  INSTITUTE_TYPES,
+  PHONE_COUNTRY_CODES,
+  apiSubmitContact,
+  type ContactTopic,
+  type InstituteType,
+} from "@/lib/api/contact";
 import { useAuth } from "@/lib/auth";
 import { BRAND } from "@/lib/brand";
+import { pushMarketingEvent } from "@/lib/seo/analytics";
+import { applyDocumentSeo, PUBLIC_PAGE_SEO } from "@/lib/seo/public-pages";
 import { cn } from "@/lib/utils";
 
 const C = BRAND.contact;
@@ -126,11 +135,7 @@ export function ContactPage() {
   const reduce = useReducedMotion();
 
   useEffect(() => {
-    const prev = document.title;
-    document.title = `Contact · ${BRAND.name}`;
-    return () => {
-      document.title = prev;
-    };
+    applyDocumentSeo(PUBLIC_PAGE_SEO.contact);
   }, []);
 
   const fadeUp = (delay = 0) =>
@@ -365,6 +370,13 @@ function ChannelCard({ channel }: { channel: Channel }) {
         href={channel.href}
         target={channel.external ? "_blank" : undefined}
         rel={channel.external ? "noopener noreferrer" : undefined}
+        onClick={() => {
+          if (channel.id === "voice") {
+            pushMarketingEvent("call_click", { cta_location: "form" });
+          } else if (channel.id === "whatsapp") {
+            pushMarketingEvent("whatsapp_click", { cta_location: "form" });
+          }
+        }}
         className="mt-auto inline-flex items-center gap-1.5 pt-4 text-[13.5px] font-semibold text-[var(--mkt-green-deep)] transition-colors hover:text-[var(--mkt-green)]"
       >
         {channel.cta}
@@ -381,8 +393,11 @@ type FormState = {
   topic: ContactTopic;
   name: string;
   email: string;
+  phoneCountry: string;
   phone: string;
   school: string;
+  cityCountry: string;
+  instituteType: InstituteType;
   message: string;
   website: string;
 };
@@ -391,15 +406,24 @@ type FormErrors = Partial<Record<keyof FormState, string>>;
 const inputClass =
   "h-12 w-full rounded-xl border bg-white px-4 text-[14.5px] text-[var(--mkt-ink)] outline-none transition-[border-color,box-shadow] placeholder:text-black/35 focus:border-[var(--mkt-green)] focus:ring-4 focus:ring-[var(--mkt-green)]/15";
 
-function ContactForm() {
+function composePhone(country: string, local: string): string {
+  const digits = local.replace(/[^\d]/g, "");
+  if (!digits) return "";
+  return `${country}${digits}`;
+}
+
+export function ContactForm({ compact = false }: { compact?: boolean }) {
   const { session } = useAuth();
   const startedAt = useRef(Date.now());
   const [form, setForm] = useState<FormState>(() => ({
     topic: "demo",
     name: session?.displayName ?? "",
     email: session?.email ?? "",
+    phoneCountry: "+91",
     phone: "",
     school: session?.tenantName ?? "",
+    cityCountry: "",
+    instituteType: "school",
     message: "",
     website: "",
   }));
@@ -421,6 +445,7 @@ function ContactForm() {
         `Hi Feezo team — ${topicLabel}.`,
         form.name && `Name: ${form.name}`,
         form.school && `School: ${form.school}`,
+        form.cityCountry && `City/Country: ${form.cityCountry}`,
         form.message,
       ]
         .filter(Boolean)
@@ -432,12 +457,15 @@ function ContactForm() {
     if (submitting) return;
     const e: FormErrors = {};
     if (!form.name.trim()) e.name = "Please tell us your name";
+    if (!form.school.trim()) e.school = "Please enter your school or academy name";
     if (!EMAIL_RE.test(form.email.trim())) e.email = "Enter a valid email";
-    if (form.phone.trim() && !/^\+?[0-9 ()-]{7,20}$/.test(form.phone.trim())) {
+    if (!form.phone.trim()) e.phone = "Enter a phone number";
+    else if (!/^\d{6,15}$/.test(form.phone.replace(/[^\d]/g, ""))) {
       e.phone = "Enter a valid phone number";
     }
+    if (!form.cityCountry.trim()) e.cityCountry = "Enter city / country";
     setErrors(e);
-    const first = (["name", "email", "phone"] as const).find((k) => e[k]);
+    const first = (["name", "school", "email", "phone", "cityCountry"] as const).find((k) => e[k]);
     if (first) {
       document.getElementById(`contact-${first}`)?.focus();
       return;
@@ -450,13 +478,22 @@ function ContactForm() {
         topic: form.topic,
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
-        phone: form.phone.trim() || undefined,
+        phone: composePhone(form.phoneCountry, form.phone) || undefined,
         school: form.school.trim() || undefined,
-        message: form.message.trim(),
+        cityCountry: form.cityCountry.trim() || undefined,
+        instituteType: form.instituteType,
+        message:
+          form.message.trim() ||
+          `Demo / trial request · ${form.instituteType} · ${form.cityCountry.trim()}`,
         website: form.website,
         elapsedMs: Date.now() - startedAt.current,
         page: typeof window !== "undefined" ? window.location.pathname : undefined,
       });
+      pushMarketingEvent(
+        form.topic === "demo" ? "demo_request" : "lead_form_submit",
+        { cta_location: "form" },
+      );
+      pushMarketingEvent("lead_form_submit", { cta_location: "form", topic: form.topic });
       setDone({ reference: res.reference });
     } catch (err) {
       setServerError(
@@ -496,7 +533,7 @@ function ContactForm() {
             <WhatsAppIcon className="h-4 w-4" /> Need it sooner?
           </a>
           <Link
-            to="/home"
+            to="/"
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--mkt-green)] px-4 text-[13px] font-semibold text-white hover:bg-[var(--mkt-green-deep)]"
           >
             Back to home
@@ -514,40 +551,42 @@ function ContactForm() {
       className="relative rounded-[28px] border border-[var(--mkt-line)] bg-white p-5 shadow-[0_24px_60px_-40px_rgba(26,28,44,0.5)] sm:p-8"
     >
       <h2 className="text-[1.35rem] font-bold tracking-tight text-[var(--mkt-ink)] sm:text-[1.6rem]">
-        Send us a message
+        {compact ? "Request a demo" : "Send us a message"}
       </h2>
       <p className="mt-1 text-[14px] text-[var(--mkt-muted)]">
         Tell us a little about your school and we'll get back with the right person.
       </p>
 
-      <fieldset className="mt-6">
-        <legend className="mb-2 text-[12.5px] font-semibold text-[var(--mkt-ink)]/80">
-          What can we help with?
-        </legend>
-        <div role="radiogroup" className="flex flex-wrap gap-2">
-          {CONTACT_TOPICS.map((t) => {
-            const on = form.topic === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                onClick={() => set("topic", t.id)}
-                className={cn(
-                  "inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-medium transition-colors",
-                  on
-                    ? "border-[var(--mkt-green)] bg-[var(--mkt-soft)] text-[var(--mkt-ink)]"
-                    : "border-[var(--mkt-line)] bg-white text-[var(--mkt-ink)]/70 hover:border-[var(--mkt-green)]/40",
-                )}
-              >
-                {on ? <Check className="h-3.5 w-3.5 text-[var(--mkt-green)]" aria-hidden /> : null}
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+      {!compact ? (
+        <fieldset className="mt-6">
+          <legend className="mb-2 text-[12.5px] font-semibold text-[var(--mkt-ink)]/80">
+            What can we help with?
+          </legend>
+          <div role="radiogroup" className="flex flex-wrap gap-2">
+            {CONTACT_TOPICS.map((t) => {
+              const on = form.topic === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => set("topic", t.id)}
+                  className={cn(
+                    "inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-medium transition-colors",
+                    on
+                      ? "border-[var(--mkt-green)] bg-[var(--mkt-soft)] text-[var(--mkt-ink)]"
+                      : "border-[var(--mkt-line)] bg-white text-[var(--mkt-ink)]/70 hover:border-[var(--mkt-green)]/40",
+                  )}
+                >
+                  {on ? <Check className="h-3.5 w-3.5 text-[var(--mkt-green)]" aria-hidden /> : null}
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+      ) : null}
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <FormField id="contact-name" label="Your name" required error={errors.name}>
@@ -560,6 +599,18 @@ function ContactForm() {
             value={form.name}
             maxLength={120}
             onChange={(e) => set("name", e.target.value)}
+          />
+        </FormField>
+        <FormField id="contact-school" label="School / academy name" required error={errors.school}>
+          <input
+            id="contact-school"
+            name="organization"
+            autoComplete="organization"
+            className={cn(inputClass, errors.school ? "border-red-300" : "border-[var(--mkt-line)]")}
+            placeholder="School or academy name"
+            value={form.school}
+            maxLength={200}
+            onChange={(e) => set("school", e.target.value)}
           />
         </FormField>
         <FormField id="contact-email" label="Email" required error={errors.email}>
@@ -577,31 +628,63 @@ function ContactForm() {
             onChange={(e) => set("email", e.target.value)}
           />
         </FormField>
-        <FormField id="contact-phone" label="Phone / WhatsApp" error={errors.phone}>
+        <FormField id="contact-phone" label="Phone / WhatsApp" required error={errors.phone}>
+          <div className="flex gap-2">
+            <select
+              aria-label="Country code"
+              className={cn(inputClass, "w-[7.5rem] shrink-0 px-2 border-[var(--mkt-line)]")}
+              value={form.phoneCountry}
+              onChange={(e) => set("phoneCountry", e.target.value)}
+            >
+              {PHONE_COUNTRY_CODES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <input
+              id="contact-phone"
+              name="tel"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel-national"
+              className={cn(inputClass, errors.phone ? "border-red-300" : "border-[var(--mkt-line)]")}
+              placeholder="98765 43210"
+              value={form.phone}
+              maxLength={15}
+              onChange={(e) => set("phone", e.target.value)}
+            />
+          </div>
+        </FormField>
+        <FormField id="contact-cityCountry" label="City / country" required error={errors.cityCountry}>
           <input
-            id="contact-phone"
-            name="tel"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            className={cn(inputClass, errors.phone ? "border-red-300" : "border-[var(--mkt-line)]")}
-            placeholder="+91 98765 43210"
-            value={form.phone}
-            maxLength={20}
-            onChange={(e) => set("phone", e.target.value)}
+            id="contact-cityCountry"
+            name="cityCountry"
+            autoComplete="address-level2"
+            className={cn(
+              inputClass,
+              errors.cityCountry ? "border-red-300" : "border-[var(--mkt-line)]",
+            )}
+            placeholder="Malappuram, India"
+            value={form.cityCountry}
+            maxLength={120}
+            onChange={(e) => set("cityCountry", e.target.value)}
           />
         </FormField>
-        <FormField id="contact-school" label="School / organisation">
-          <input
-            id="contact-school"
-            name="organization"
-            autoComplete="organization"
+        <FormField id="contact-instituteType" label="Institute type" required>
+          <select
+            id="contact-instituteType"
+            name="instituteType"
             className={cn(inputClass, "border-[var(--mkt-line)]")}
-            placeholder="School name"
-            value={form.school}
-            maxLength={200}
-            onChange={(e) => set("school", e.target.value)}
-          />
+            value={form.instituteType}
+            onChange={(e) => set("instituteType", e.target.value as InstituteType)}
+          >
+            {INSTITUTE_TYPES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
         </FormField>
       </div>
 

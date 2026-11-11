@@ -4,8 +4,8 @@ import { appDownloadQrUrl } from "@/lib/app-download";
 import { cn } from "@/lib/utils";
 
 /**
- * CheQ-style floating “Scan to download app” QR — fixed bottom-right on marketing pages.
- * Encodes https://www.feezo.app/download which redirects iOS → App Store, Android → Play.
+ * Floating “Scan to download app” QR for the /download page.
+ * Encodes https://www.feezo.app/download (store-button landing).
  * Hidden on small screens (already on a phone); shown from md up.
  */
 export function AppDownloadQr({ className }: { className?: string }) {

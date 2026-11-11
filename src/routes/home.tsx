@@ -1,21 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { lazy, Suspense } from "react";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-const MarketingLanding = lazy(() =>
-  import("@/components/marketing/MarketingLanding").then((m) => ({
-    default: m.MarketingLanding,
-  })),
-);
-
-/** Public marketing home — available even when signed in (unlike `/`). */
+/** Legacy marketing URL — 301 at the edge; client redirect as a fallback. */
 export const Route = createFileRoute("/home")({
-  component: HomePage,
+  beforeLoad: () => {
+    throw redirect({ to: "/", replace: true });
+  },
 });
-
-function HomePage() {
-  return (
-    <Suspense fallback={null}>
-      <MarketingLanding />
-    </Suspense>
-  );
-}

@@ -12,6 +12,7 @@ import { useMarketingActiveSection } from "@/hooks/useMarketingActiveSection";
 import { BRAND } from "@/lib/brand";
 import { MARKETING } from "@/lib/marketing-content";
 import { handleMarketingSectionClick } from "@/lib/marketing-scroll";
+import { pushMarketingEvent } from "@/lib/seo/analytics";
 import { cn } from "@/lib/utils";
 
 const SOCIAL_LINKS = [
@@ -97,7 +98,7 @@ export function MarketingFooter() {
           {/* Brand */}
           <motion.div className="sm:col-span-2 lg:col-span-4" variants={columnReveal}>
             <Link
-              to="/home"
+              to="/"
               className="inline-flex items-center gap-3 rounded-xl outline-offset-4 transition-transform hover:scale-[1.02] active:scale-[0.98]"
               aria-label={`${BRAND.name} home`}
             >
@@ -129,6 +130,7 @@ export function MarketingFooter() {
                 <a
                   href={`tel:${BRAND.contact.phoneE164}`}
                   className="hover:text-[var(--mkt-green-deep)]"
+                  onClick={() => pushMarketingEvent("call_click", { cta_location: "footer" })}
                 >
                   {BRAND.contact.phoneDisplay}
                 </a>
@@ -136,10 +138,11 @@ export function MarketingFooter() {
                   ·
                 </span>
                 <a
-                  href={`https://wa.me/${BRAND.contact.whatsappNumber}`}
+                  href={`https://wa.me/${BRAND.contact.whatsappNumber}?text=${encodeURIComponent("Hi Feezo team, I'd like to know more about Feezo for my school.")}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-emerald-700 hover:underline"
+                  onClick={() => pushMarketingEvent("whatsapp_click", { cta_location: "footer" })}
                 >
                   WhatsApp
                 </a>
@@ -149,9 +152,21 @@ export function MarketingFooter() {
                 {BRAND.contact.location}
               </li>
             </ul>
-            <TrialSignupLink className="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-[var(--mkt-ink)] px-5 text-[13px] font-semibold text-white transition hover:bg-[var(--mkt-ink)]/90">
-              Start free trial
-            </TrialSignupLink>
+            <div className="mt-6 flex flex-wrap gap-2">
+              <TrialSignupLink
+                ctaLocation="footer"
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-[var(--mkt-ink)] px-5 text-[13px] font-semibold text-white transition hover:bg-[var(--mkt-ink)]/90"
+              >
+                Start 14-day trial
+              </TrialSignupLink>
+              <a
+                href="/contact"
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--mkt-line)] bg-white px-5 text-[13px] font-semibold text-[var(--mkt-ink)] transition hover:border-[var(--mkt-green)]/40"
+                onClick={() => pushMarketingEvent("demo_request", { cta_location: "footer" })}
+              >
+                Book a demo
+              </a>
+            </div>
           </motion.div>
 
           {/* Explore + Legal — always 2 columns on one row */}
@@ -220,8 +235,28 @@ export function MarketingFooter() {
               Manage fees and accounts on the go — same workspace, mobile-ready.
             </p>
             <div className="mt-5 flex flex-row items-stretch gap-2.5 sm:gap-3">
-              <StoreBadge variant="play" reduce={reduce} className="w-auto min-w-0 flex-1" />
-              <StoreBadge variant="apple" reduce={reduce} className="w-auto min-w-0 flex-1" />
+              <StoreBadge
+                variant="play"
+                reduce={reduce}
+                className="w-auto min-w-0 flex-1"
+                onClick={() =>
+                  pushMarketingEvent("app_download_click", {
+                    cta_location: "footer",
+                    store: "google_play",
+                  })
+                }
+              />
+              <StoreBadge
+                variant="apple"
+                reduce={reduce}
+                className="w-auto min-w-0 flex-1"
+                onClick={() =>
+                  pushMarketingEvent("app_download_click", {
+                    cta_location: "footer",
+                    store: "app_store",
+                  })
+                }
+              />
             </div>
           </motion.div>
         </motion.div>

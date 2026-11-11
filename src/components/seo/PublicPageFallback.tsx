@@ -80,7 +80,6 @@ export function PublicPageFallback({ pathname }: { pathname: string }) {
 export function isPublicIndexablePath(pathname: string): boolean {
   return (
     pathname === "/" ||
-    pathname === "/home" ||
     pathname === "/contact" ||
     pathname === "/download" ||
     pathname === "/login" ||

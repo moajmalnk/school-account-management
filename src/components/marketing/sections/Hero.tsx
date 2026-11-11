@@ -1,9 +1,12 @@
+import { Link } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
 
 import { HeroShowcase } from "@/components/marketing/HeroShowcase";
 import { StoreBadge } from "@/components/marketing/StoreBadge";
+import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { easeOutExpo } from "@/components/marketing/motion";
 import { MARKETING } from "@/lib/marketing-content";
+import { pushMarketingEvent } from "@/lib/seo/analytics";
 
 export function Hero({ noDelay = false }: { noDelay?: boolean }) {
   const reduce = useReducedMotion();
@@ -35,9 +38,44 @@ export function Hero({ noDelay = false }: { noDelay?: boolean }) {
             {MARKETING.hero.support}
           </p>
 
-          <div className="flex w-full max-w-md flex-row items-stretch gap-2 sm:max-w-none sm:w-auto sm:gap-3">
-            <StoreBadge variant="play" reduce={reduce} />
-            <StoreBadge variant="apple" reduce={reduce} />
+          <div className="flex w-full max-w-md flex-col items-stretch gap-3 sm:max-w-none sm:w-auto">
+            <div className="flex flex-row items-stretch gap-2 sm:gap-3">
+              <TrialSignupLink
+                ctaLocation="hero"
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-[var(--mkt-green)] px-4 text-[14px] font-semibold text-white transition hover:bg-[var(--mkt-green-deep)] sm:flex-none sm:px-5"
+              >
+                Start 14-day trial
+              </TrialSignupLink>
+              <Link
+                to="/contact"
+                onClick={() => pushMarketingEvent("demo_request", { cta_location: "hero" })}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-[var(--mkt-line)] bg-white px-4 text-[14px] font-semibold text-[var(--mkt-ink)] transition hover:border-[var(--mkt-green)]/40 sm:flex-none sm:px-5"
+              >
+                Book a demo
+              </Link>
+            </div>
+            <div className="flex flex-row items-stretch gap-2 sm:gap-3">
+              <StoreBadge
+                variant="play"
+                reduce={reduce}
+                onClick={() =>
+                  pushMarketingEvent("app_download_click", {
+                    cta_location: "hero",
+                    store: "google_play",
+                  })
+                }
+              />
+              <StoreBadge
+                variant="apple"
+                reduce={reduce}
+                onClick={() =>
+                  pushMarketingEvent("app_download_click", {
+                    cta_location: "hero",
+                    store: "app_store",
+                  })
+                }
+              />
+            </div>
           </div>
         </motion.div>
       </div>

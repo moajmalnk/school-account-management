@@ -20,6 +20,7 @@ import { familyForgot, familyLogin, familyToken } from "@/lib/api/family";
 import { ApiError } from "@/lib/api/client";
 import { homePathForSession, API_UNREACHABLE_MESSAGE, useAuth } from "@/lib/auth";
 import { consumeGoogleRedirectCredential, isGoogleSignInConfigured } from "@/lib/google-gis";
+import { applyNoindex } from "@/lib/seo/public-pages";
 import { cn } from "@/lib/utils";
 
 const SCHOOL_DEACTIVATED_MESSAGE =
@@ -72,6 +73,10 @@ function LoginPage() {
   const digits = useMemo(() => phoneDigits(identifier), [identifier]);
   const isPhonePath = idMode === "phone";
   const isEmailPath = idMode === "email";
+
+  useEffect(() => {
+    applyNoindex();
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

@@ -1,12 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AlertCircle, Eye, EyeOff } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/client";
 import { apiResetPassword } from "@/lib/api/auth";
+import { applyNoindex } from "@/lib/seo/public-pages";
 
 type ResetPasswordSearch = {
   token?: string;
@@ -23,6 +24,10 @@ function ResetPasswordPage() {
   const navigate = useNavigate();
   const { token } = Route.useSearch();
   const hasToken = Boolean(token && token.length >= 32);
+
+  useEffect(() => {
+    applyNoindex();
+  }, []);
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");

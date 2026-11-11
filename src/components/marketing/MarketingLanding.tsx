@@ -1,10 +1,11 @@
 import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 
+import { HomeLeadSection } from "@/components/marketing/HomeLeadSection";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
 import { Hero } from "@/components/marketing/sections/Hero";
 import { importWithRetry } from "@/lib/lazy-with-retry";
-import { MARKETING } from "@/lib/marketing-content";
 import { preloadMarketingSections, scrollToMarketingSection } from "@/lib/marketing-scroll";
+import { applyDocumentSeo, PUBLIC_PAGE_SEO } from "@/lib/seo/public-pages";
 
 const HowItWorks = lazy(() =>
   importWithRetry(() =>
@@ -86,6 +87,7 @@ function BelowFoldSections({ onReady }: { onReady: () => void }) {
           <Pricing />
         </Suspense>
       </QuietSection>
+      <HomeLeadSection />
     </>
   );
 }
@@ -98,13 +100,14 @@ export function MarketingLanding() {
   const [showBelowFold, setShowBelowFold] = useState(() => Boolean(hash));
 
   useEffect(() => {
-    document.title = MARKETING.title;
-    const meta = document.querySelector('meta[name="description"]');
-    if (meta) meta.setAttribute("content", MARKETING.description);
+    applyDocumentSeo(PUBLIC_PAGE_SEO.home);
     // Keep the HTML hero visible long enough for LCP discovery, then hand off to React.
     const dismiss = (window as Window & { __feezoDismissBootShell?: () => void })
       .__feezoDismissBootShell;
-    const timer = window.setTimeout(() => dismiss?.(), 1200);
+    const timer = window.setTimeout(() => {
+      dismiss?.();
+      window.dispatchEvent(new Event("feezo:hydrated"));
+    }, 1200);
     return () => window.clearTimeout(timer);
   }, []);
 

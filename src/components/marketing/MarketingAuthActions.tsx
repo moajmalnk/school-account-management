@@ -3,6 +3,7 @@ import { ArrowRight, LayoutDashboard } from "lucide-react";
 
 import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { homePathForSession, useAuth } from "@/lib/auth";
+import { pushMarketingEvent } from "@/lib/seo/analytics";
 import { cn } from "@/lib/utils";
 
 const PRIMARY =
@@ -68,23 +69,35 @@ export function MarketingAuthActions({
     return (
       <>
         <TrialSignupLink
+          ctaLocation="header"
           className={cn(
             PRIMARY,
             "h-12 w-full rounded-xl text-[15px] shadow-[0_8px_24px_rgba(143,202,74,0.35)]",
           )}
           onClick={onNavigate}
         >
-          Start Free Trial
+          Start 14-day trial
           <ArrowRight className="h-4 w-4" aria-hidden />
         </TrialSignupLink>
         <Link
-          to="/login"
+          to="/contact"
           preload="intent"
-          onClick={onNavigate}
+          onClick={() => {
+            pushMarketingEvent("demo_request", { cta_location: "header" });
+            onNavigate?.();
+          }}
           className={cn(
             SECONDARY,
             "mt-3 h-11 w-full rounded-xl border border-[var(--mkt-line)] bg-white text-[14px] hover:border-[var(--mkt-green)]/40",
           )}
+        >
+          Book a demo
+        </Link>
+        <Link
+          to="/login"
+          preload="intent"
+          onClick={onNavigate}
+          className={cn(SECONDARY, "mt-2 h-10 w-full text-[13px] text-[var(--mkt-muted)]")}
         >
           Sign in
         </Link>
@@ -95,14 +108,18 @@ export function MarketingAuthActions({
   return (
     <div className="hidden items-center gap-1 sm:flex sm:gap-2">
       <Link
-        to="/login"
+        to="/contact"
         preload="intent"
+        onClick={() => pushMarketingEvent("demo_request", { cta_location: "header" })}
         className={cn(SECONDARY, "h-10 px-3 text-[14px] lg:px-4 lg:text-[15px]")}
       >
-        Sign in
+        Book a demo
       </Link>
-      <TrialSignupLink className={cn(PRIMARY, "h-10 px-5 text-[14px] lg:px-6 lg:text-[15px]")}>
-        Start Free Trial
+      <TrialSignupLink
+        ctaLocation="header"
+        className={cn(PRIMARY, "h-10 px-5 text-[14px] lg:px-6 lg:text-[15px]")}
+      >
+        Start 14-day trial
       </TrialSignupLink>
     </div>
   );

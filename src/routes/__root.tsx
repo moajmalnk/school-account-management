@@ -58,14 +58,21 @@ function NotFoundComponent() {
           Page not found
         </h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          The page you're looking for doesn't exist or has been moved.
+          That URL is not part of Feezo. Head home or start a free trial.
         </p>
-        <div className="mt-6">
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <Link
             to="/"
             className="inline-flex items-center justify-center rounded-full bg-zinc-950 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white"
           >
-            Go home
+            Go to homepage
+          </Link>
+          <Link
+            to="/signup/$step"
+            params={{ step: "school" }}
+            className="inline-flex items-center justify-center rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          >
+            Start 14-day trial
           </Link>
         </div>
       </div>

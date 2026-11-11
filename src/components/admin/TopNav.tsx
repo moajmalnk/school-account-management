@@ -139,7 +139,7 @@ export function TopNav() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link to="/home">
+                <Link to="/">
                   <Home className="mr-2 h-3.5 w-3.5" /> Home page
                 </Link>
               </DropdownMenuItem>

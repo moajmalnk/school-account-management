@@ -3,15 +3,16 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { FeezoMark } from "@/components/brand/FeezoBrand";
-import { AppDownloadQr } from "@/components/marketing/AppDownloadQr";
 import { MarketingAuthActions } from "@/components/marketing/MarketingAuthActions";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingMobileNav } from "@/components/marketing/MarketingMobileNav";
 import { MARKETING_THEME_VARS } from "@/components/marketing/marketing-theme";
+import { WhatsAppFab } from "@/components/marketing/WhatsAppFab";
 import { useMarketingActiveSection } from "@/hooks/useMarketingActiveSection";
 import { BRAND } from "@/lib/brand";
 import { MARKETING } from "@/lib/marketing-content";
 import { handleMarketingSectionClick } from "@/lib/marketing-scroll";
+import { pushMarketingEvent } from "@/lib/seo/analytics";
 
 export function MarketingShell({
   children,
@@ -56,7 +57,7 @@ export function MarketingShell({
       >
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-5 sm:h-16 sm:gap-4 sm:px-10">
           <Link
-            to="/home"
+            to="/"
             className="shrink-0 rounded-lg outline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mkt-green)] transition-transform hover:scale-105 active:scale-95 flex items-center gap-2"
             aria-label={`${BRAND.name} home`}
           >
@@ -96,6 +97,17 @@ export function MarketingShell({
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <a
+              href={`tel:${BRAND.contact.phoneE164}`}
+              className="hidden h-10 items-center rounded-lg px-2 text-[13px] font-semibold text-[var(--mkt-ink)] transition-colors hover:text-[var(--mkt-green-deep)] xl:inline-flex"
+              onClick={() =>
+                pushMarketingEvent("call_click", {
+                  cta_location: "header",
+                })
+              }
+            >
+              {BRAND.contact.phoneDisplay}
+            </a>
             <MarketingAuthActions variant="header" />
             <MarketingMobileNav />
           </div>
@@ -114,7 +126,7 @@ export function MarketingShell({
         {showFooter ? <MarketingFooter /> : null}
       </div>
 
-      <AppDownloadQr />
+      <WhatsAppFab />
     </div>
   );
 }
