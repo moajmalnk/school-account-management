@@ -55,7 +55,7 @@ export function MarketingShell({
             : "0 4px 20px rgba(26, 28, 44, 0.04)",
         }}
       >
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-5 sm:h-16 sm:gap-4 sm:px-10">
+        <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-2 px-4 sm:h-16 sm:gap-3 sm:px-6 lg:px-8">
           <Link
             to="/"
             className="shrink-0 rounded-lg outline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mkt-green)] transition-transform hover:scale-105 active:scale-95 flex items-center gap-2"
@@ -72,13 +72,16 @@ export function MarketingShell({
             </div>
           </Link>
 
-          <nav className="hidden items-center gap-8 lg:flex" aria-label="Page sections">
+          <nav
+            className="hidden min-w-0 flex-1 items-center justify-center gap-4 xl:flex 2xl:gap-6"
+            aria-label="Page sections"
+          >
             {MARKETING.nav.map((item) => (
               <a
                 key={item.id}
                 href={`#${item.id}`}
                 onClick={(event) => handleMarketingSectionClick(event, item.id)}
-                className={`text-[15px] font-medium transition-colors hover:text-[var(--mkt-green-deep)] ${
+                className={`shrink-0 whitespace-nowrap text-[14px] font-medium transition-colors hover:text-[var(--mkt-green-deep)] 2xl:text-[15px] ${
                   item.id === activeSection
                     ? "text-[var(--mkt-green)]"
                     : "text-[var(--mkt-ink)] hover:text-[var(--mkt-green)]"
@@ -89,17 +92,17 @@ export function MarketingShell({
             ))}
             <Link
               to="/contact"
-              className="text-[15px] font-medium text-[var(--mkt-ink)] transition-colors hover:text-[var(--mkt-green)]"
+              className="shrink-0 whitespace-nowrap text-[14px] font-medium text-[var(--mkt-ink)] transition-colors hover:text-[var(--mkt-green)] 2xl:text-[15px]"
               activeProps={{ className: "!text-[var(--mkt-green)]" }}
             >
               Contact
             </Link>
           </nav>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <a
               href={`tel:${BRAND.contact.phoneE164}`}
-              className="hidden h-10 items-center rounded-lg px-2 text-[13px] font-semibold text-[var(--mkt-ink)] transition-colors hover:text-[var(--mkt-green-deep)] xl:inline-flex"
+              className="hidden h-10 items-center whitespace-nowrap rounded-lg px-2 text-[13px] font-semibold text-[var(--mkt-ink)] transition-colors hover:text-[var(--mkt-green-deep)] 2xl:inline-flex"
               onClick={() =>
                 pushMarketingEvent("call_click", {
                   cta_location: "header",

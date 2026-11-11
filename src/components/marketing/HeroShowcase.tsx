@@ -134,15 +134,11 @@ function prefersLightData(): boolean {
   return Boolean(conn?.saveData) || /(^|-)2g$/.test(conn?.effectiveType ?? "");
 }
 
-/** Keep the multi-megabyte hero video off the mobile / bot critical path. */
+/** Keep the multi-megabyte hero video off the mobile / bot / data-saver path. */
 function prefersPosterOnly(): boolean {
   if (typeof window === "undefined") return true;
   if (window.matchMedia("(max-width: 1024px)").matches) return true;
   if (window.matchMedia("(prefers-reduced-data: reduce)").matches) return true;
-  if (typeof navigator !== "undefined" && "connection" in navigator) {
-    const conn = (navigator as Navigator & { connection?: { downlink?: number } }).connection;
-    if (typeof conn?.downlink === "number" && conn.downlink > 0 && conn.downlink < 5) return true;
-  }
   return prefersLightData();
 }
 
@@ -225,20 +221,53 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
 
   useEffect(() => () => window.clearTimeout(bufferTimer.current), []);
 
-  // Never autoplay into LCP. Unlock only after a real user gesture on capable desktops.
+  // Stay off the LCP path, then unlock muted autoplay on capable desktops.
+  // Gesture / scroll unlocks immediately; otherwise start after a short idle delay.
   useEffect(() => {
     if (reduce || isSearchCrawler() || prefersPosterOnly()) return;
 
-    const unlock = () => setEnabled(true);
+    let unlocked = false;
+    const unlock = () => {
+      if (unlocked) return;
+      unlocked = true;
+      setEnabled(true);
+    };
+
     const opts: AddEventListenerOptions = { once: true, passive: true };
     window.addEventListener("pointerdown", unlock, opts);
     window.addEventListener("keydown", unlock, opts);
     window.addEventListener("touchstart", unlock, opts);
+    window.addEventListener("scroll", unlock, opts);
+    window.addEventListener("wheel", unlock, opts);
+
+    let idleId: number | undefined;
+    let timer: number | undefined;
+    const armIdle = () => {
+      const w = window as Window & {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+        cancelIdleCallback?: (id: number) => void;
+      };
+      if (w.requestIdleCallback) {
+        idleId = w.requestIdleCallback(unlock, { timeout: 2800 });
+      } else {
+        timer = window.setTimeout(unlock, 2200);
+      }
+    };
+    if (document.readyState === "complete") armIdle();
+    else window.addEventListener("load", armIdle, { once: true });
 
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
       window.removeEventListener("touchstart", unlock);
+      window.removeEventListener("scroll", unlock);
+      window.removeEventListener("wheel", unlock);
+      if (idleId !== undefined) {
+        (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(
+          idleId,
+        );
+      }
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [reduce]);
 
@@ -367,8 +396,8 @@ export function HeroShowcase({ alt, startDelayMs = 700 }: { alt: string; startDe
             muted
             loop
             playsInline
-            autoPlay={false}
-            preload="none"
+            autoPlay
+            preload="metadata"
             disablePictureInPicture
             disableRemotePlayback
             aria-hidden

@@ -25,6 +25,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { WhatsAppIcon } from "@/components/ui/whatsapp-icon";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -406,6 +413,15 @@ type FormErrors = Partial<Record<keyof FormState, string>>;
 const inputClass =
   "h-12 w-full rounded-xl border bg-white px-4 text-[14.5px] text-[var(--mkt-ink)] outline-none transition-[border-color,box-shadow] placeholder:text-black/35 focus:border-[var(--mkt-green)] focus:ring-4 focus:ring-[var(--mkt-green)]/15";
 
+const selectTriggerClass =
+  "h-12 rounded-xl border border-[var(--mkt-line)] bg-white px-3 text-[14.5px] text-[var(--mkt-ink)] shadow-none focus:border-[var(--mkt-green)] focus:ring-4 focus:ring-[var(--mkt-green)]/15 focus:ring-offset-0 data-[placeholder]:text-black/35";
+
+const selectContentClass =
+  "z-[130] rounded-xl border border-[var(--mkt-line)] bg-white p-1.5 text-[var(--mkt-ink)] shadow-[0_18px_48px_-18px_rgba(26,28,44,0.45)]";
+
+const selectItemClass =
+  "cursor-pointer rounded-lg py-2.5 pl-3 pr-8 text-[14px] focus:bg-[var(--mkt-soft)] focus:text-[var(--mkt-ink)] data-[state=checked]:bg-[var(--mkt-soft)] data-[state=checked]:font-semibold";
+
 function composePhone(country: string, local: string): string {
   const digits = local.replace(/[^\d]/g, "");
   if (!digits) return "";
@@ -630,18 +646,24 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
         </FormField>
         <FormField id="contact-phone" label="Phone / WhatsApp" required error={errors.phone}>
           <div className="flex gap-2">
-            <select
-              aria-label="Country code"
-              className={cn(inputClass, "w-[7.5rem] shrink-0 px-2 border-[var(--mkt-line)]")}
+            <Select
               value={form.phoneCountry}
-              onChange={(e) => set("phoneCountry", e.target.value)}
+              onValueChange={(value) => set("phoneCountry", value)}
             >
-              {PHONE_COUNTRY_CODES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                aria-label="Country code"
+                className={cn(selectTriggerClass, "w-[7.75rem] shrink-0")}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className={selectContentClass} position="popper" align="start">
+                {PHONE_COUNTRY_CODES.map((c) => (
+                  <SelectItem key={c.code} value={c.code} className={selectItemClass}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <input
               id="contact-phone"
               name="tel"
@@ -672,19 +694,24 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
           />
         </FormField>
         <FormField id="contact-instituteType" label="Institute type" required>
-          <select
-            id="contact-instituteType"
-            name="instituteType"
-            className={cn(inputClass, "border-[var(--mkt-line)]")}
+          <Select
             value={form.instituteType}
-            onChange={(e) => set("instituteType", e.target.value as InstituteType)}
+            onValueChange={(value) => set("instituteType", value as InstituteType)}
           >
-            {INSTITUTE_TYPES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              id="contact-instituteType"
+              className={cn(selectTriggerClass, "w-full")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className={selectContentClass} position="popper">
+              {INSTITUTE_TYPES.map((t) => (
+                <SelectItem key={t.id} value={t.id} className={selectItemClass}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </FormField>
       </div>
 

@@ -16,8 +16,10 @@ import { createPortal } from "react-dom";
 import { MarketingAuthActions } from "@/components/marketing/MarketingAuthActions";
 import { MARKETING_THEME_VARS } from "@/components/marketing/marketing-theme";
 import { useMarketingActiveSection } from "@/hooks/useMarketingActiveSection";
+import { BRAND } from "@/lib/brand";
 import { MARKETING } from "@/lib/marketing-content";
 import { handleMarketingSectionClick, preloadMarketingSections } from "@/lib/marketing-scroll";
+import { pushMarketingEvent } from "@/lib/seo/analytics";
 import { cn } from "@/lib/utils";
 
 const NAV_META: Record<
@@ -96,14 +98,14 @@ export function MarketingMobileNav() {
 
   useEffect(() => {
     const onResize = () => {
-      if (window.matchMedia("(min-width: 1024px)").matches) close();
+      if (window.matchMedia("(min-width: 1280px)").matches) close();
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [close]);
 
   return (
-    <div className="lg:hidden">
+    <div className="xl:hidden">
       <MenuToggle open={open} onClick={() => (open ? close() : openMenu())} />
 
       {mounted
@@ -268,6 +270,16 @@ export function MarketingMobileNav() {
                           close();
                         }}
                       />
+                      <a
+                        href={`tel:${BRAND.contact.phoneE164}`}
+                        className="mt-3 flex h-11 items-center justify-center rounded-xl text-[14px] font-semibold text-[var(--mkt-ink)] transition hover:text-[var(--mkt-green-deep)]"
+                        onClick={() => {
+                          pushMarketingEvent("call_click", { cta_location: "header" });
+                          close();
+                        }}
+                      >
+                        Call {BRAND.contact.phoneDisplay}
+                      </a>
                     </motion.div>
                   </motion.div>
                 </>

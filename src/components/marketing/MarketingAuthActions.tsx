@@ -106,18 +106,24 @@ export function MarketingAuthActions({
   }
 
   return (
-    <div className="hidden items-center gap-1 sm:flex sm:gap-2">
+    <div className="flex items-center gap-1.5 sm:gap-2">
       <Link
         to="/contact"
         preload="intent"
         onClick={() => pushMarketingEvent("demo_request", { cta_location: "header" })}
-        className={cn(SECONDARY, "h-10 px-3 text-[14px] lg:px-4 lg:text-[15px]")}
+        className={cn(
+          SECONDARY,
+          "hidden h-10 whitespace-nowrap px-3 text-[14px] xl:inline-flex 2xl:px-4",
+        )}
       >
         Book a demo
       </Link>
       <TrialSignupLink
         ctaLocation="header"
-        className={cn(PRIMARY, "h-10 px-5 text-[14px] lg:px-6 lg:text-[15px]")}
+        className={cn(
+          PRIMARY,
+          "hidden h-10 whitespace-nowrap px-3 text-[13px] sm:inline-flex sm:px-4 sm:text-[14px] 2xl:px-5",
+        )}
       >
         Start 14-day trial
       </TrialSignupLink>

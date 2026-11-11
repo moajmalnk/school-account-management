@@ -125,7 +125,7 @@ export function DigitalTransformation() {
                   width={280}
                   height={381}
                   sizes="(max-width: 1024px) 270px, 280px"
-                  className="h-full w-auto max-h-full max-w-full object-contain object-bottom drop-shadow-[0_14px_32px_rgba(0,0,0,0.14)] lg:object-right-bottom"
+                  className="h-full w-auto max-h-full max-w-full object-contain object-bottom lg:object-right-bottom"
                   loading="lazy"
                   decoding="async"
                   fetchPriority="low"
