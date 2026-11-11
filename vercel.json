@@ -3,7 +3,6 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "cleanUrls": true,
   "trailingSlash": false,
   "redirects": [
     {
@@ -41,7 +40,7 @@
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     },
     {
-      "source": "/404.html",
+      "source": "/not-found.html",
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     },
     {
@@ -115,23 +114,9 @@
     }
   ],
   "rewrites": [
-    { "source": "/login", "destination": "/index.html" },
-    { "source": "/forgot-password", "destination": "/index.html" },
-    { "source": "/reset-password", "destination": "/index.html" },
-    { "source": "/impersonate", "destination": "/index.html" },
-    { "source": "/signup", "destination": "/index.html" },
-    { "source": "/signup/:path*", "destination": "/index.html" },
-    { "source": "/tenant", "destination": "/index.html" },
-    { "source": "/tenant/:path*", "destination": "/index.html" },
-    { "source": "/super-admin", "destination": "/index.html" },
-    { "source": "/super-admin/:path*", "destination": "/index.html" },
-    { "source": "/family", "destination": "/index.html" },
-    { "source": "/family/:path*", "destination": "/index.html" },
-    { "source": "/privacy", "destination": "/index.html" },
-    { "source": "/terms", "destination": "/index.html" },
-    { "source": "/refund-policy", "destination": "/index.html" },
-    { "source": "/data-deletion", "destination": "/index.html" },
-    { "source": "/staff/collect/:token", "destination": "/index.html" },
-    { "source": "/parent/student/:token", "destination": "/index.html" }
+    {
+      "source": "/((?!api/|assets/|og/|home/|manifest\\.webmanifest|version\\.json|sw\\.js|workbox-|robots\\.txt|sitemap\\.xml|llms\\.txt|llm\\.txt|not-found\\.html|.*\\.(?:js|mjs|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|mp4|webmanifest|txt|xml|json|pdf)$).*)",
+      "destination": "/index.html"
+    }
   ]
 }

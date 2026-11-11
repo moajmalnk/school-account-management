@@ -131,6 +131,7 @@ export default defineConfig(({ mode }) => {
             /^\/sitemap\.xml$/,
             /^\/llms\.txt$/,
             /^\/llm\.txt$/,
+            /^\/not-found\.html$/,
             /\.(?:js|mjs|css|png|jpe?g|gif|webp|svg|ico|woff2?|mp4|webmanifest|txt|xml|json|pdf)$/,
           ],
           runtimeCaching: [

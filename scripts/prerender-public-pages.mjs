@@ -4,9 +4,9 @@
  *   dist/index.html (patched home meta)
  *   dist/contact/index.html
  *   dist/download/index.html
- *   dist/404.html
+ *   dist/not-found.html  (not named 404.html — Vercel auto-serves 404.html for every miss and breaks SPA routes)
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -363,9 +363,11 @@ async function main() {
   </body>
 </html>
 `;
-  await writeFile(path.join(dist, "404.html"), notFound, "utf8");
+  // Do not ship 404.html — Vercel treats it as a global fallback and ignores SPA rewrites.
+  await writeFile(path.join(dist, "not-found.html"), notFound, "utf8");
+  await unlink(path.join(dist, "404.html")).catch(() => undefined);
 
-  console.log("Prerendered public pages: /, /contact, /download, 404.html");
+  console.log("Prerendered public pages: /, /contact, /download, not-found.html");
 }
 
 main().catch((err) => {
