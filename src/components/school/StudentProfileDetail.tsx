@@ -1034,6 +1034,7 @@ export function StudentProfileDetail({
         onOpenChange={setShareOpen}
         token={shareToken}
         studentName={student.name}
+        schoolName={schoolName}
         guardianPhone={student.phone}
         guardianName={student.guardian}
       />

@@ -22,6 +22,7 @@ export function ShareParentLinkDialog({
   onOpenChange,
   token,
   studentName,
+  schoolName,
   guardianPhone,
   guardianName,
 }: {
@@ -29,12 +30,15 @@ export function ShareParentLinkDialog({
   onOpenChange: (open: boolean) => void;
   token: string;
   studentName: string;
+  /** Active campus / tenant school name for the WhatsApp draft. */
+  schoolName?: string;
   guardianPhone?: string;
   guardianName?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const [phone, setPhone] = useState(guardianPhone ?? "");
   const url = token ? parentStudentAbsoluteUrl(token) : "";
+  const school = schoolName?.trim() || "your school";
 
   useEffect(() => {
     if (open) setPhone(guardianPhone ?? "");
@@ -47,12 +51,12 @@ export function ShareParentLinkDialog({
     return [
       greeting,
       "",
-      `Please complete ${studentName}'s profile for Silver Hills Global using this private link:`,
+      `Please complete ${studentName}'s profile for ${school} using this private link:`,
       url,
       "",
       "School-filled details are locked. You can update photo, gender, DOB, email, address, phone, guardian details, and bus points.",
     ].join("\n");
-  }, [guardianName, studentName, url]);
+  }, [guardianName, school, studentName, url]);
 
   const copyLink = async () => {
     if (!url) return;

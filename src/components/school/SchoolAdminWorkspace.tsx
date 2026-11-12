@@ -3433,9 +3433,12 @@ export function AdmitStudentPage() {
     admitStudentToActiveYear,
     activeFeeTerms,
     academicYear,
+    schoolDetails,
   } = useTenantStore();
+  const { session } = useAuth();
   const navigate = useNavigate();
   const defaultClass = classes[0]?.className ?? "";
+  const schoolName = schoolDetails.name || session?.tenantName || "your school";
   const [form, setForm] = useState<AdmitStudentForm>(() => emptyAdmitForm(defaultClass));
   const [concession, setConcession] = useState<StudentConcessionState>(emptyConcessionState);
   const [shareOpen, setShareOpen] = useState(false);
@@ -3825,6 +3828,7 @@ export function AdmitStudentPage() {
         }}
         token={shareToken}
         studentName={shareName}
+        schoolName={schoolName}
         guardianPhone={sharePhone}
         guardianName={shareGuardian}
       />
