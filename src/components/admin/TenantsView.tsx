@@ -959,12 +959,23 @@ export function TenantsView({
                     {t.subdomain}.feezo.app
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <span
-                      className="inline-flex items-center rounded-md border border-[#D1FAE5] bg-[#ECFDF5] px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide text-[#0F766E]"
-                      title="Tenant ID"
+                    <button
+                      type="button"
+                      className="group/id inline-flex items-center gap-1 rounded-md border border-[#D1FAE5] bg-[#ECFDF5] px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide text-[#0F766E] transition-colors hover:border-[#0F766E]/35 hover:bg-[#D1FAE5]"
+                      title="Copy tenant ID"
+                      aria-label={`Copy tenant ID ${formatTenantPublicId(t.id)}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const id = formatTenantPublicId(t.id);
+                        void navigator.clipboard.writeText(id).then(
+                          () => toast.success("Tenant ID copied", { description: id }),
+                          () => toast.error("Could not copy"),
+                        );
+                      }}
                     >
                       {formatTenantPublicId(t.id)}
-                    </span>
+                      <Copy className="h-2.5 w-2.5 opacity-55 transition-opacity group-hover/id:opacity-100" />
+                    </button>
                     {ageDays !== null ? (
                       <span className="font-mono text-[11px] text-black/40">
                         {ageDays === 0 ? "today" : `${ageDays}d old`}
