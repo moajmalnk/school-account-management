@@ -92,7 +92,7 @@ export function FeeHeadReport() {
     { label: "Overdue", value: formatMoney(totals.overdue), accent: totals.overdue > 0 },
   ];
 
-  const runExport = (format: "csv" | "pdf" | "print") => {
+  const runExport = (format: "csv" | "pdf" | "print", landscape?: boolean) => {
     const headers = ["Head", "Kind", "Billed", "Collected", "Due", "Overdue", "Collection"];
     exportReportFile({
       format,
@@ -117,6 +117,7 @@ export function FeeHeadReport() {
       summary: summary.map(({ label, value }) => ({ label, value })),
       schoolName,
       academicYear,
+      landscape,
     });
     toast.success(format === "print" ? "Print dialog opened" : format === "csv" ? "CSV downloaded" : "PDF downloaded");
   };
@@ -132,9 +133,10 @@ export function FeeHeadReport() {
             </p>
           </div>
           <ReportExportButtons
+            reportLabel="Fee Heads"
             onCsv={() => runExport("csv")}
-            onPdf={() => runExport("pdf")}
-            onPrint={() => runExport("print")}
+            onPdf={(landscape) => runExport("pdf", landscape)}
+            onPrint={(landscape) => runExport("print", landscape)}
           />
         </div>
         <ReportSummary items={summary} />

@@ -58,7 +58,7 @@ export type Session = {
   email: string;
   displayName: string;
   tenantName?: string;
-  /** Stable public tenant id (e.g. T-2000) — scopes workspace cache. */
+  /** Stable public tenant id (e.g. TN-002000) — scopes workspace cache. */
   tenantId?: string;
   issuedAt: number;
   userId?: string;

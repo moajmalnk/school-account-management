@@ -89,7 +89,7 @@ export function FeeAgingReport() {
     { label: "Over 90 days", value: formatMoney(totals.d90plus), accent: totals.d90plus > 0 },
   ];
 
-  const runExport = (format: "csv" | "pdf" | "print") => {
+  const runExport = (format: "csv" | "pdf" | "print", landscape?: boolean) => {
     const headers = ["ID", "Student", "Class", "Oldest due", ...MONEY_HEADERS];
     exportReportFile({
       format,
@@ -115,6 +115,7 @@ export function FeeAgingReport() {
       summary: summary.map(({ label, value }) => ({ label, value })),
       schoolName,
       academicYear,
+      landscape,
     });
     toast.success(format === "print" ? "Print dialog opened" : format === "csv" ? "CSV downloaded" : "PDF downloaded");
   };
@@ -130,9 +131,10 @@ export function FeeAgingReport() {
             </p>
           </div>
           <ReportExportButtons
+            reportLabel="Fee Aging"
             onCsv={() => runExport("csv")}
-            onPdf={() => runExport("pdf")}
-            onPrint={() => runExport("print")}
+            onPdf={(landscape) => runExport("pdf", landscape)}
+            onPrint={(landscape) => runExport("print", landscape)}
           />
         </div>
         <ReportSummary items={summary} />

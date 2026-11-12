@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ReportPdfLayoutDialog } from "@/components/school/finance/report-chrome";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -224,6 +225,7 @@ function emitTransfersListPdf(opts: {
   academicYear: string;
   subtitle: string;
   action?: "download" | "print";
+  landscape?: boolean;
 }) {
   const total = opts.rows.reduce((s, r) => s + r.amount, 0);
   downloadTablePdf({
@@ -253,7 +255,7 @@ function emitTransfersListPdf(opts: {
       { label: "Total moved", value: formatMoneyPdf(total) },
     ],
     emptyMessage: "No fund transfers",
-    landscape: true,
+    landscape: opts.landscape ?? true,
     action: opts.action ?? "download",
   });
   toast.success(opts.action === "print" ? "Print dialog opened" : "Transfer report PDF downloaded");
@@ -1507,7 +1509,8 @@ export function TransferReports() {
   const [period, setPeriod] = useState<PaymentPeriod>("this_month");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
   const [kindFilter, setKindFilter] = useState<"all" | TransferKind>("all");
-  const [pendingExport, setPendingExport] = useState<"csv" | "pdf" | null>(null);
+  const [pendingExport, setPendingExport] = useState<"csv" | null>(null);
+  const [pendingPdfMode, setPendingPdfMode] = useState<"pdf" | "print" | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editingJournal, setEditingJournal] = useState<GlJournal | null>(null);
   const [editFromId, setEditFromId] = useState("");
@@ -1606,13 +1609,14 @@ export function TransferReports() {
     emitTransfersListCsv(filtered, schoolName, academicYear || "");
   };
 
-  const handlePdf = (action: "download" | "print" = "download") => {
+  const handlePdf = (action: "download" | "print" = "download", landscape = true) => {
     emitTransfersListPdf({
       rows: filtered,
       schoolName,
       academicYear: academicYear || "",
       subtitle: `${schoolName} · ${academicYear || "All years"} · ${periodLabel}`,
       action,
+      landscape,
     });
   };
 
@@ -1695,7 +1699,6 @@ export function TransferReports() {
 
   const confirmExport = () => {
     if (pendingExport === "csv") handleCsv();
-    else if (pendingExport === "pdf") handlePdf("download");
     setPendingExport(null);
   };
 
@@ -1754,7 +1757,7 @@ export function TransferReports() {
                 size="sm"
                 variant="ghost"
                 className="h-8 rounded-full px-2.5 text-[11px]"
-                onClick={() => setPendingExport("pdf")}
+                onClick={() => setPendingPdfMode("pdf")}
               >
                 <Download className="mr-1 h-3.5 w-3.5" />
                 PDF
@@ -1764,7 +1767,7 @@ export function TransferReports() {
                 size="sm"
                 variant="ghost"
                 className="h-8 rounded-full px-2.5 text-[11px]"
-                onClick={() => handlePdf("print")}
+                onClick={() => setPendingPdfMode("print")}
               >
                 <Printer className="mr-1 h-3.5 w-3.5" />
                 Print
@@ -2003,10 +2006,10 @@ export function TransferReports() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{pendingExport === "csv" ? "Export CSV" : "Export PDF"}</DialogTitle>
+            <DialogTitle>Export CSV</DialogTitle>
             <DialogDescription>
-              Export Transfer Reports as a {pendingExport === "csv" ? "CSV" : "PDF"} file? The
-              download will start immediately after confirmation.
+              Export Transfer Reports as a CSV file? The download will start immediately after
+              confirmation.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -2018,11 +2021,26 @@ export function TransferReports() {
               className="bg-[#0F766E] text-white hover:bg-[#0D9488]"
               onClick={confirmExport}
             >
-              {pendingExport === "csv" ? "Export CSV" : "Export PDF"}
+              Export CSV
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReportPdfLayoutDialog
+        open={Boolean(pendingPdfMode)}
+        mode={pendingPdfMode}
+        reportLabel="Transfer Reports"
+        defaultOrientation="landscape"
+        onOpenChange={(next) => {
+          if (!next) setPendingPdfMode(null);
+        }}
+        onConfirm={(orientation) => {
+          const landscape = orientation === "landscape";
+          handlePdf(pendingPdfMode === "print" ? "print" : "download", landscape);
+          setPendingPdfMode(null);
+        }}
+      />
 
       <Dialog
         open={editOpen}

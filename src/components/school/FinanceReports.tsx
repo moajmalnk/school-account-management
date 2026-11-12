@@ -16,6 +16,10 @@ import {
 import { toast } from "sonner";
 
 import { FeesReportExportDialog, type FeesExportChoice, type FeesExportFormat } from "@/components/school/FeesReportExportDialog";
+import {
+  ReportPdfLayoutDialog,
+  type PdfPageOrientation,
+} from "@/components/school/finance/report-chrome";
 import { isRecordDeleted } from "@/components/school/ProfileAccountActions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -217,41 +221,25 @@ function ExportActions({
   onPdf,
   onPrint,
   confirmTitle,
+  defaultOrientation = "landscape",
   className,
 }: {
   onCsv: () => void;
-  onPdf: () => void;
-  onPrint: () => void;
+  onPdf: (landscape: boolean) => void;
+  onPrint: (landscape: boolean) => void;
   confirmTitle: string;
+  defaultOrientation?: PdfPageOrientation;
   className?: string;
 }) {
-  const [pendingExport, setPendingExport] = useState<"csv" | "pdf" | null>(null);
-
-  const confirmExport = () => {
-    if (pendingExport === "csv") onCsv();
-    else if (pendingExport === "pdf") onPdf();
-    setPendingExport(null);
-  };
-
-  const exportCopy = {
-    csv: {
-      title: "Export CSV",
-      description: `Export ${confirmTitle} as a CSV file? The download will start immediately after confirmation.`,
-      confirm: "Export CSV",
-    },
-    pdf: {
-      title: "Export PDF",
-      description: `Export ${confirmTitle} as a PDF file? The download will start immediately after confirmation.`,
-      confirm: "Export PDF",
-    },
-  } as const;
+  const [pendingCsv, setPendingCsv] = useState(false);
+  const [pendingPdfMode, setPendingPdfMode] = useState<"pdf" | "print" | null>(null);
 
   return (
     <>
       <div className={cn("grid grid-cols-3 gap-1.5 sm:gap-2", className)}>
         <button
           type="button"
-          onClick={() => setPendingExport("csv")}
+          onClick={() => setPendingCsv(true)}
           className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-1.5 text-[10.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:gap-1.5 sm:px-3 sm:text-[12px]"
         >
           <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
@@ -259,7 +247,7 @@ function ExportActions({
         </button>
         <button
           type="button"
-          onClick={() => setPendingExport("pdf")}
+          onClick={() => setPendingPdfMode("pdf")}
           className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full bg-[#0F766E] px-2 py-1.5 text-[10.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:gap-1.5 sm:px-3 sm:text-[12px]"
         >
           <Download className="h-3.5 w-3.5 shrink-0" />
@@ -267,7 +255,7 @@ function ExportActions({
         </button>
         <button
           type="button"
-          onClick={onPrint}
+          onClick={() => setPendingPdfMode("print")}
           className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-1.5 text-[10.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:gap-1.5 sm:px-3 sm:text-[12px]"
         >
           <Printer className="h-3.5 w-3.5 shrink-0" />
@@ -276,36 +264,52 @@ function ExportActions({
       </div>
 
       <Dialog
-        open={Boolean(pendingExport)}
+        open={pendingCsv}
         onOpenChange={(next) => {
-          if (!next) setPendingExport(null);
+          if (!next) setPendingCsv(false);
         }}
       >
         <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black">
-              {pendingExport ? exportCopy[pendingExport].title : "Confirm Export"}
-            </DialogTitle>
+            <DialogTitle className="text-[22px] font-semibold text-black">Export CSV</DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
-              {pendingExport
-                ? exportCopy[pendingExport].description
-                : "Are you sure you want to export this report?"}
+              Export {confirmTitle} as a CSV file? The download will start immediately after
+              confirmation.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-5 flex-row justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setPendingExport(null)}>
+            <Button type="button" variant="outline" onClick={() => setPendingCsv(false)}>
               Cancel
             </Button>
             <Button
               type="button"
-              onClick={confirmExport}
+              onClick={() => {
+                onCsv();
+                setPendingCsv(false);
+              }}
               className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
             >
-              {pendingExport ? exportCopy[pendingExport].confirm : "Export"}
+              Export CSV
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReportPdfLayoutDialog
+        open={Boolean(pendingPdfMode)}
+        mode={pendingPdfMode}
+        reportLabel={confirmTitle}
+        defaultOrientation={defaultOrientation}
+        onOpenChange={(next) => {
+          if (!next) setPendingPdfMode(null);
+        }}
+        onConfirm={(orientation) => {
+          const landscape = orientation === "landscape";
+          if (pendingPdfMode === "print") onPrint(landscape);
+          else onPdf(landscape);
+          setPendingPdfMode(null);
+        }}
+      />
     </>
   );
 }
@@ -315,16 +319,24 @@ function ExportBar({
   onCsv,
   onPdf,
   onPrint,
+  defaultOrientation = "landscape",
 }: {
   title: string;
   onCsv: () => void;
-  onPdf: () => void;
-  onPrint: () => void;
+  onPdf: (landscape: boolean) => void;
+  onPrint: (landscape: boolean) => void;
+  defaultOrientation?: PdfPageOrientation;
 }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="text-title text-slate-900 dark:text-zinc-50">{title}</div>
-      <ExportActions onCsv={onCsv} onPdf={onPdf} onPrint={onPrint} confirmTitle={title} />
+      <ExportActions
+        onCsv={onCsv}
+        onPdf={onPdf}
+        onPrint={onPrint}
+        confirmTitle={title}
+        defaultOrientation={defaultOrientation}
+      />
     </div>
   );
 }
@@ -831,7 +843,7 @@ export function GeneralLedgerReport() {
     toast.success("Ledger exported as CSV");
   };
 
-  const handlePdf = () => {
+  const handlePdf = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("general-ledger", "pdf", schoolName, academicYear),
       title: "General Ledger",
@@ -840,12 +852,12 @@ export function GeneralLedgerReport() {
       rows: buildGeneralLedgerPdfRows(),
       summaryItems: generalLedgerPdfSummary(),
       emptyMessage: "No ledger postings for this period",
-      landscape: true,
+      landscape,
     });
     toast.success("Ledger exported as PDF");
   };
 
-  const handlePrint = () => {
+  const handlePrint = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("general-ledger", "pdf", schoolName, academicYear),
       title: "General Ledger",
@@ -854,7 +866,7 @@ export function GeneralLedgerReport() {
       rows: buildGeneralLedgerPdfRows(),
       summaryItems: generalLedgerPdfSummary(),
       emptyMessage: "No ledger postings for this period",
-      landscape: true,
+      landscape,
       action: "print",
     });
     toast.success("Print dialog opened");
@@ -1151,7 +1163,7 @@ export function ProfitLossReport() {
     toast.success("P&L exported as CSV");
   };
 
-  const handlePdf = () => {
+  const handlePdf = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("profit-loss", "pdf", schoolName, academicYear),
       title: "Profit & Loss Account",
@@ -1160,12 +1172,12 @@ export function ProfitLossReport() {
       rows: buildProfitLossPdfRows(),
       summaryItems: profitLossPdfSummary(),
       emptyMessage: "No income or expense recorded for this period",
-      landscape: false,
+      landscape,
     });
     toast.success("P&L exported as PDF");
   };
 
-  const handlePrint = () => {
+  const handlePrint = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("profit-loss", "pdf", schoolName, academicYear),
       title: "Profit & Loss Account",
@@ -1174,7 +1186,7 @@ export function ProfitLossReport() {
       rows: buildProfitLossPdfRows(),
       summaryItems: profitLossPdfSummary(),
       emptyMessage: "No income or expense recorded for this period",
-      landscape: false,
+      landscape,
       action: "print",
     });
     toast.success("Print dialog opened");
@@ -1198,6 +1210,7 @@ export function ProfitLossReport() {
               onPdf={handlePdf}
               onPrint={handlePrint}
               confirmTitle="Profit & Loss Account"
+              defaultOrientation="portrait"
             />
           </div>
         </div>
@@ -1428,7 +1441,7 @@ export function BalanceSheetReport() {
     toast.success("Balance sheet exported as CSV");
   };
 
-  const handlePdf = () => {
+  const handlePdf = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("balance-sheet", "pdf", schoolName, academicYear),
       title: "Balance Sheet",
@@ -1436,12 +1449,12 @@ export function BalanceSheetReport() {
       headers: [...balanceSheetPdfHeaders],
       rows: buildBalanceSheetPdfRows(),
       summaryItems: balanceSheetPdfSummary(),
-      landscape: false,
+      landscape,
     });
     toast.success("Balance sheet exported as PDF");
   };
 
-  const handlePrint = () => {
+  const handlePrint = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("balance-sheet", "pdf", schoolName, academicYear),
       title: "Balance Sheet",
@@ -1449,7 +1462,7 @@ export function BalanceSheetReport() {
       headers: [...balanceSheetPdfHeaders],
       rows: buildBalanceSheetPdfRows(),
       summaryItems: balanceSheetPdfSummary(),
-      landscape: false,
+      landscape,
       action: "print",
     });
     toast.success("Print dialog opened");
@@ -1471,6 +1484,7 @@ export function BalanceSheetReport() {
               onPdf={handlePdf}
               onPrint={handlePrint}
               confirmTitle="Balance Sheet"
+              defaultOrientation="portrait"
             />
           </div>
         </div>
@@ -2012,7 +2026,7 @@ export function FeesReport() {
         { label: "Outstanding", value: formatMoneyPdf(selectedTotal) },
       ],
       emptyMessage: "No students in this class filter",
-      landscape: true,
+      landscape: choice.landscape ?? true,
       action: format === "print" ? "print" : undefined,
     });
     toast.success(format === "print" ? "Print dialog opened" : "Class fee sheet downloaded");
@@ -2397,7 +2411,7 @@ export function ConcessionReport() {
     moneyColumnLabel("Relief", { pdf: true }),
   ] as const;
 
-  const handlePdf = () => {
+  const handlePdf = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("concession-report", "pdf", schoolName, academicYear),
       title: "Concession Report",
@@ -2406,12 +2420,12 @@ export function ConcessionReport() {
       rows: pdfRows(),
       summaryItems: pdfSummary(),
       emptyMessage: "No students on fee concession",
-      landscape: true,
+      landscape,
     });
     toast.success("Concession report PDF downloaded");
   };
 
-  const handlePrint = () => {
+  const handlePrint = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("concession-report", "pdf", schoolName, academicYear),
       title: "Concession Report",
@@ -2420,7 +2434,7 @@ export function ConcessionReport() {
       rows: pdfRows(),
       summaryItems: pdfSummary(),
       emptyMessage: "No students on fee concession",
-      landscape: true,
+      landscape,
       action: "print",
     });
     toast.success("Print dialog opened");
@@ -2553,6 +2567,7 @@ export function SalaryReport() {
   const { disbursements } = useDisbursements();
   const schoolName = schoolDetails.name || "School";
   const [payrollMonth, setPayrollMonth] = useState(currentPayrollMonth);
+  const [payrollPdfMode, setPayrollPdfMode] = useState<"pdf" | "print" | null>(null);
 
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("all");
@@ -2922,7 +2937,7 @@ export function SalaryReport() {
     toast.success("Salary report exported", { description: "CSV download started" });
   };
 
-  const handlePdf = () => {
+  const handlePdf = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("salary-report", "pdf", schoolName, academicYear, {
         name: payrollMonth,
@@ -2933,12 +2948,12 @@ export function SalaryReport() {
       rows: buildSalaryReportPdfRows(),
       summaryItems: salaryReportPdfSummary(),
       emptyMessage: "No staff on payroll for this month",
-      landscape: true,
+      landscape,
     });
     toast.success("Salary report PDF downloaded");
   };
 
-  const handlePrint = () => {
+  const handlePrint = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("salary-report", "pdf", schoolName, academicYear, {
         name: payrollMonth,
@@ -2949,7 +2964,7 @@ export function SalaryReport() {
       rows: buildSalaryReportPdfRows(),
       summaryItems: salaryReportPdfSummary(),
       emptyMessage: "No staff on payroll for this month",
-      landscape: true,
+      landscape,
       action: "print",
     });
     toast.success("Print dialog opened");
@@ -3003,6 +3018,21 @@ export function SalaryReport() {
               onPrint={handlePrint}
               confirmTitle="Salary Report"
               className="min-w-[16rem] flex-1 basis-[16rem] grid-cols-3 sm:max-w-none lg:flex-none"
+            />
+            <ReportPdfLayoutDialog
+              open={Boolean(payrollPdfMode)}
+              mode={payrollPdfMode}
+              reportLabel="Salary Report"
+              defaultOrientation="landscape"
+              onOpenChange={(next) => {
+                if (!next) setPayrollPdfMode(null);
+              }}
+              onConfirm={(orientation) => {
+                const landscape = orientation === "landscape";
+                if (payrollPdfMode === "print") handlePrint(landscape);
+                else handlePdf(landscape);
+                setPayrollPdfMode(null);
+              }}
             />
           </div>
         </div>
@@ -3059,7 +3089,7 @@ export function SalaryReport() {
               </button>
               <button
                 type="button"
-                onClick={handlePrint}
+                onClick={() => setPayrollPdfMode("print")}
                 aria-label="Print payroll register"
                 title="Print"
                 className={payrollRegisterActionClass}
@@ -3068,7 +3098,7 @@ export function SalaryReport() {
               </button>
               <button
                 type="button"
-                onClick={handlePdf}
+                onClick={() => setPayrollPdfMode("pdf")}
                 aria-label="Download payroll register"
                 title="Download"
                 className={payrollRegisterActionClass}
@@ -3488,7 +3518,7 @@ export function DayBookReport() {
     toast.success("Day book exported", { description: "CSV download started" });
   };
 
-  const handlePdf = () => {
+  const handlePdf = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("day-book", "pdf", schoolName, academicYear),
       title: "Day Book",
@@ -3497,12 +3527,12 @@ export function DayBookReport() {
       rows: buildDayBookPdfRows(),
       summaryItems: dayBookPdfSummary(),
       emptyMessage: "No day book entries for this period",
-      landscape: true,
+      landscape,
     });
     toast.success("Day book PDF downloaded");
   };
 
-  const handlePrint = () => {
+  const handlePrint = (landscape: boolean) => {
     downloadTablePdf({
       filename: reportDownloadName("day-book", "pdf", schoolName, academicYear),
       title: "Day Book",
@@ -3511,7 +3541,7 @@ export function DayBookReport() {
       rows: buildDayBookPdfRows(),
       summaryItems: dayBookPdfSummary(),
       emptyMessage: "No day book entries for this period",
-      landscape: true,
+      landscape,
       action: "print",
     });
     toast.success("Print dialog opened");
@@ -3918,7 +3948,10 @@ export function BankReconciliationReport() {
     ];
   };
 
-  const emitBankReconPdf = (action: "download" | "print" = "download") => {
+  const emitBankReconPdf = (
+    action: "download" | "print" = "download",
+    landscape = false,
+  ) => {
     const cleared = bankTxns.filter((txn) => isCleared(txn.id));
     const unclearedReceipts = unclearedTxns.filter((txn) => txn.kind === "Receipt");
     const unclearedPayments = unclearedTxns.filter((txn) => txn.kind === "Payment");
@@ -3940,7 +3973,7 @@ export function BankReconciliationReport() {
       summaryItems: bankReconPdfSummary(),
       summaryPlacement: "before",
       striped: false,
-      landscape: false,
+      landscape,
       appendTables: [
         ...(unclearedReceipts.length
           ? [schedule(`Deposits in Transit (${unclearedReceipts.length})`, unclearedReceipts)]
@@ -3981,13 +4014,13 @@ export function BankReconciliationReport() {
     toast.success("Bank reconciliation exported", { description: "CSV download started" });
   };
 
-  const handlePdf = () => {
-    emitBankReconPdf("download");
+  const handlePdf = (landscape: boolean) => {
+    emitBankReconPdf("download", landscape);
     toast.success("Bank reconciliation PDF downloaded");
   };
 
-  const handlePrint = () => {
-    emitBankReconPdf("print");
+  const handlePrint = (landscape: boolean) => {
+    emitBankReconPdf("print", landscape);
     toast.success("Print dialog opened");
   };
 
@@ -4008,6 +4041,7 @@ export function BankReconciliationReport() {
               onPdf={handlePdf}
               onPrint={handlePrint}
               confirmTitle="Bank Reconciliation"
+              defaultOrientation="portrait"
             />
           </div>
         </div>

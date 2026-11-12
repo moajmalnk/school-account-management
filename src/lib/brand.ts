@@ -12,11 +12,11 @@ export const BRAND = {
   contactPath: "/contact",
   contact: {
     email: "info@feezo.app",
-    phoneDisplay: "+91 77364 83502",
-    phoneE164: "+917736483502",
-    whatsappDisplay: "+91 77364 83502",
+    phoneDisplay: "+91 94473 39048",
+    phoneE164: "+919447339048",
+    whatsappDisplay: "+91 94473 39048",
     /** wa.me expects digits only, no + */
-    whatsappNumber: "917736483502",
+    whatsappNumber: "919447339048",
     location: "Malappuram, Kerala",
     registeredAddress:
       "Building No. 15-566/G, Kuzhimanna, Melekeezhisseri, Malappuram, Kerala - 673641",

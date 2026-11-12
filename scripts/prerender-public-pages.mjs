@@ -20,10 +20,10 @@ const OG_IMAGE = `${SITE}/og/feezo-share.jpg`;
 const BRAND = {
   name: "Feezo",
   email: "info@feezo.app",
-  phoneDisplay: "+91 77364 83502",
-  phoneE164: "+917736483502",
-  whatsappDisplay: "+91 77364 83502",
-  whatsappNumber: "917736483502",
+  phoneDisplay: "+91 94473 39048",
+  phoneE164: "+919447339048",
+  whatsappDisplay: "+91 94473 39048",
+  whatsappNumber: "919447339048",
   location: "Malappuram, Kerala",
   registeredAddress:
     "Building No. 15-566/G, Kuzhimanna, Melekeezhisseri, Malappuram, Kerala - 673641",

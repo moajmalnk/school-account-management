@@ -191,7 +191,7 @@ export function CashFlowReport() {
     return rows;
   }, [statement]);
 
-  const runExport = (format: "csv" | "pdf" | "print") => {
+  const runExport = (format: "csv" | "pdf" | "print", landscape?: boolean) => {
     exportReportFile({
       format,
       filenameBase: "cash-flow",
@@ -208,6 +208,7 @@ export function CashFlowReport() {
       summary: summary.map(({ label, value }) => ({ label, value })),
       schoolName,
       academicYear,
+      landscape,
     });
     toast.success(format === "print" ? "Print dialog opened" : format === "csv" ? "CSV downloaded" : "PDF downloaded");
   };
@@ -244,9 +245,10 @@ export function CashFlowReport() {
         </div>
         <div className="flex flex-col gap-2 lg:items-end">
           <ReportExportButtons
+            reportLabel="Cash Flow"
             onCsv={() => runExport("csv")}
-            onPdf={() => runExport("pdf")}
-            onPrint={() => runExport("print")}
+            onPdf={(landscape) => runExport("pdf", landscape)}
+            onPrint={(landscape) => runExport("print", landscape)}
           />
           <Button
             type="button"

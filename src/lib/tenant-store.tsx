@@ -1028,6 +1028,8 @@ export type Payment = {
   name: string;
   cat: string;
   mode: string;
+  /** GL bank ledger public id when mode is Bank / Both / Online */
+  bankAccountId?: string | null;
   amount: number;
   time: string;
   /** Academic year books this receipt belongs to · e.g. "AY 2025-26" */

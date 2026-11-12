@@ -28,9 +28,15 @@ import {
   Check,
   Landmark,
   RotateCcw,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { type Tenant, type Tier, type Status } from "./data";
+import {
+  formatTenantPublicId,
+  tenantIdSearchText,
+  tenantIdsMatch,
+} from "@/lib/tenant-public-id";
 import {
   deleteSuperAdminTenant,
   fetchSuperAdminTenants,
@@ -378,7 +384,9 @@ export function TenantsView({
         if (!cancelled) {
           setTenants(list);
           if (initialTenantId) {
-            const match = list.find((t) => t.id === initialTenantId);
+            const match = list.find(
+              (t) => t.id === initialTenantId || tenantIdsMatch(t.id, initialTenantId),
+            );
             if (match) {
               setDetailTarget(match);
               if (initialDetailTab) setDetailTab(initialDetailTab);
@@ -479,7 +487,10 @@ export function TenantsView({
       } else if (status !== "all" && t.status !== status) {
         return false;
       }
-      if (query && !`${t.name} ${t.subdomain} ${t.id}`.toLowerCase().includes(query.toLowerCase()))
+      if (
+        query &&
+        !tenantIdSearchText(t.id, t.name, t.subdomain).includes(query.trim().toLowerCase())
+      )
         return false;
       if (activityMetric !== "all" && activityWindow !== "all") {
         if (!matchesActivityWindow(t, activityMetric, activityWindow, now)) return false;
@@ -579,7 +590,7 @@ export function TenantsView({
         return next;
       });
       toast.error(`${target.name} deleted`, {
-        description: `${target.id} · ${target.subdomain}.feezo.app · all school data removed`,
+        description: `${formatTenantPublicId(target.id)} · ${target.subdomain}.feezo.app · all school data removed`,
       });
       resetDeleteDialog();
     } catch (err) {
@@ -730,7 +741,7 @@ export function TenantsView({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by school, subdomain, or tenant ID…"
+            placeholder="Search by school, subdomain, or ID (TN-002029)…"
             className="h-11 rounded-full border-[#E5E5E5] bg-[#F4F4F5] pl-9 text-[13px] sm:h-10"
           />
         </div>
@@ -947,10 +958,17 @@ export function TenantsView({
                   <div className="mt-0.5 truncate font-mono text-[11px] text-[#0F766E]">
                     {t.subdomain}.feezo.app
                   </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] text-black/40">
-                    <span>{t.id}</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span
+                      className="inline-flex items-center rounded-md border border-[#D1FAE5] bg-[#ECFDF5] px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide text-[#0F766E]"
+                      title="Tenant ID"
+                    >
+                      {formatTenantPublicId(t.id)}
+                    </span>
                     {ageDays !== null ? (
-                      <span>· {ageDays === 0 ? "today" : `${ageDays}d old`}</span>
+                      <span className="font-mono text-[11px] text-black/40">
+                        {ageDays === 0 ? "today" : `${ageDays}d old`}
+                      </span>
                     ) : null}
                   </div>
                   {t.adminEmail ? (
@@ -1447,7 +1465,7 @@ function TenantFormDrawer({
       });
       onCreate(result.tenant);
       toast.success("Tenant provisioned", {
-        description: `${result.tenant.id} · ${result.admin.email} / ${result.admin.temporaryPassword}`,
+        description: `${formatTenantPublicId(result.tenant.id)} · ${result.admin.email} / ${result.admin.temporaryPassword}`,
       });
       reset();
       onOpenChange(false);
@@ -1841,7 +1859,7 @@ function TenantDetailDrawer({
             Tenant Details
           </DialogTitle>
           <DialogDescription className="text-[12px] text-black/55">
-            {tenant.name} · {tenant.id} · {tenant.subdomain}.feezo.app
+            {tenant.name} · {formatTenantPublicId(tenant.id)} · {tenant.subdomain}.feezo.app
           </DialogDescription>
         </DialogHeader>
 
@@ -1929,7 +1947,12 @@ function TenantDetailDrawer({
                 </div>
 
                 <div className="col-span-12 sm:col-span-4">
-                  <DetailStat label="Public ID" value={tenant.id} mono />
+                  <DetailStat
+                    label="Tenant ID"
+                    value={formatTenantPublicId(tenant.id)}
+                    mono
+                    copyable
+                  />
                 </div>
                 <div className="col-span-12 sm:col-span-8">
                   <DetailStat label="UUID" value={tenant.uuid} mono />
@@ -2559,7 +2582,12 @@ function TenantDetailDrawer({
                   <DetailStat label="Package" value={tenant.tier} />
                 </div>
                 <div className="col-span-6">
-                  <DetailStat label="Tenant ID" value={tenant.id} mono />
+                  <DetailStat
+                    label="Tenant ID"
+                    value={formatTenantPublicId(tenant.id)}
+                    mono
+                    copyable
+                  />
                 </div>
                 <div className="col-span-6">
                   <DetailStat label="Provisioned" value={tenant.createdAt || "—"} mono />
@@ -2602,16 +2630,45 @@ function TenantDetailDrawer({
   );
 }
 
-function DetailStat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function DetailStat({
+  label,
+  value,
+  mono,
+  copyable,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  copyable?: boolean;
+}) {
   return (
     <div className="h-full rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-        {label}
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+          {label}
+        </div>
+        {copyable && value && value !== "—" ? (
+          <button
+            type="button"
+            className="grid h-6 w-6 place-items-center rounded-md text-black/35 transition-colors hover:bg-black/[0.04] hover:text-[#0F766E]"
+            aria-label={`Copy ${label}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              void navigator.clipboard.writeText(value).then(
+                () => toast.success(`${label} copied`, { description: value }),
+                () => toast.error("Could not copy"),
+              );
+            }}
+          >
+            <Copy className="h-3 w-3" />
+          </button>
+        ) : null}
       </div>
       <div
         className={cn(
           "mt-1 break-all text-[13px] font-medium text-black",
           mono && "font-mono text-[12px]",
+          copyable && "tracking-wide text-[#0F766E]",
         )}
       >
         {value}
@@ -2726,7 +2783,7 @@ function EditTenantDrawer({
         <SheetHeader className="border-b border-[#E5E5E5] bg-[#F4F4F5] px-6 py-5">
           <SheetTitle className="text-[18px] font-semibold text-black">Edit Tenant Meta</SheetTitle>
           <SheetDescription className="text-[12px] text-black/55">
-            {tenant.id} · {tenant.uuid}
+            {formatTenantPublicId(tenant.id)} · {tenant.uuid}
           </SheetDescription>
         </SheetHeader>
 

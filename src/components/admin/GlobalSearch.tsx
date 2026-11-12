@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { fetchSuperAdminTenants } from "@/lib/api/super-admin";
 import { getApiToken } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money";
+import { formatTenantPublicId, tenantIdSearchText } from "@/lib/tenant-public-id";
 
 const PLAN_ITEMS = [
   { name: "Basic", hint: `${formatMoney(899, "INR")}/mo · core school ops & reporting` },
@@ -88,8 +89,12 @@ export function GlobalSearch({ variant = "field" }: GlobalSearchProps) {
     };
   }, [open]);
 
-  const go = (to: string) => {
+  const go = (to: string, search?: Record<string, string | undefined>) => {
     setOpen(false);
+    if (search) {
+      navigate({ to, search });
+      return;
+    }
     navigate({ to });
   };
 
@@ -112,7 +117,7 @@ export function GlobalSearch({ variant = "field" }: GlobalSearchProps) {
           aria-label="Open global search"
         >
           <Search className="h-3.5 w-3.5 shrink-0 text-black/40 group-hover:text-black/55" />
-          <span className="flex-1 truncate">Search…</span>
+          <span className="flex-1 truncate">Search by ID…</span>
           <kbd className="pointer-events-none hidden h-5 shrink-0 items-center gap-0.5 rounded-md border border-[#E5E5E5] bg-[#F4F6F9] px-1.5 font-mono text-[10px] font-medium text-black/45 sm:inline-flex">
             {modKey}K
           </kbd>
@@ -123,16 +128,16 @@ export function GlobalSearch({ variant = "field" }: GlobalSearchProps) {
         <DialogContent className="top-[18%] translate-y-0 gap-0 overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white p-0 shadow-[0_24px_80px_-24px_rgba(0,0,0,0.35)] sm:max-w-xl [&>button]:hidden">
           <DialogTitle className="sr-only">Global search</DialogTitle>
           <DialogDescription className="sr-only">
-            Search navigation, tenants, and plans across the control plane
+            Search navigation, tenants by ID, and plans across the control plane
           </DialogDescription>
           <Command className="rounded-2xl bg-white text-black [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-black/40">
             <CommandInput
-              placeholder="Search tenants, plans, pages…"
+              placeholder="Search by tenant ID, school, plan, or page…"
               className="h-12 text-[14px] text-black placeholder:text-black/35"
             />
             <CommandList className="max-h-[min(420px,55vh)] px-1.5 pb-2">
               <CommandEmpty className="py-8 text-[13px] text-black/45">
-                No matches · try a school name, plan, or page
+                No matches · try a tenant ID (TN-002029), school name, or page
               </CommandEmpty>
 
               <CommandGroup heading="Navigate">
@@ -158,25 +163,32 @@ export function GlobalSearch({ variant = "field" }: GlobalSearchProps) {
               <CommandSeparator className="my-1 bg-[#E5E5E5]" />
 
               <CommandGroup heading="Tenants">
-                {tenants.map((tenant) => (
-                  <CommandItem
-                    key={tenant.id}
-                    value={`${tenant.name} ${tenant.subdomain} ${tenant.id} ${tenant.tier} ${tenant.status}`}
-                    onSelect={() => go("/super-admin/tenants")}
-                    className="cursor-pointer rounded-xl px-3 py-2.5 text-[13px] aria-selected:bg-[#F4F6F9]"
-                  >
-                    <Users className="h-4 w-4 text-black/45" />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium text-black">{tenant.name}</div>
-                      <div className="truncate font-mono text-[10.5px] text-black/40">
-                        {tenant.id} · {tenant.subdomain}
+                {tenants.map((tenant) => {
+                  const idLabel = formatTenantPublicId(tenant.id);
+                  return (
+                    <CommandItem
+                      key={tenant.id}
+                      value={tenantIdSearchText(tenant.id, tenant.name, tenant.subdomain) + ` ${tenant.tier} ${tenant.status}`}
+                      onSelect={() =>
+                        go("/super-admin/tenants", {
+                          tenant: tenant.id,
+                        })
+                      }
+                      className="cursor-pointer rounded-xl px-3 py-2.5 text-[13px] aria-selected:bg-[#F4F6F9]"
+                    >
+                      <Users className="h-4 w-4 text-black/45" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium text-black">{tenant.name}</div>
+                        <div className="truncate font-mono text-[10.5px] text-black/40">
+                          {idLabel} · {tenant.subdomain}.feezo.app
+                        </div>
                       </div>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-black/[0.05] px-2 py-0.5 text-[10px] font-medium text-black/55">
-                      {tenant.tier}
-                    </span>
-                  </CommandItem>
-                ))}
+                      <span className="shrink-0 rounded-md border border-[#E5E5E5] bg-[#F4F6F9] px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide text-[#0F766E]">
+                        {idLabel}
+                      </span>
+                    </CommandItem>
+                  );
+                })}
               </CommandGroup>
 
               <CommandSeparator className="my-1 bg-[#E5E5E5]" />
@@ -199,7 +211,7 @@ export function GlobalSearch({ variant = "field" }: GlobalSearchProps) {
               </CommandGroup>
             </CommandList>
             <div className="flex items-center justify-between border-t border-[#E5E5E5] bg-[#FAFBFC] px-3 py-2 text-[10.5px] text-black/40">
-              <span>↑↓ navigate · ↵ open · esc close</span>
+              <span>↑↓ navigate · ↵ open tenant · esc close</span>
               <span className="font-mono">{modKey}K</span>
             </div>
           </Command>

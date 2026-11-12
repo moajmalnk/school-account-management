@@ -82,12 +82,10 @@ export function isPublicIndexablePath(pathname: string): boolean {
     pathname === "/" ||
     pathname === "/contact" ||
     pathname === "/download" ||
-    pathname === "/login" ||
     pathname === "/terms" ||
     pathname === "/privacy" ||
     pathname === "/refund-policy" ||
     pathname === "/data-deletion" ||
-    pathname === "/forgot-password" ||
     pathname === "/signup" ||
     pathname.startsWith("/signup/")
   );

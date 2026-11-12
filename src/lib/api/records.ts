@@ -453,6 +453,8 @@ export type DisbursementPayload = {
   desc: string;
   amount: number;
   mode: string;
+  /** GL bank ledger public id when mode is Bank / Both */
+  bankAccountId?: string | null;
   payeeType: string;
   ledgerId?: string | null;
   time?: string;

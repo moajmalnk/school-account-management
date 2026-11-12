@@ -1,5 +1,15 @@
+import { useEffect, useState } from "react";
 import { Download, FileSpreadsheet, Printer, Search, X } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,6 +21,8 @@ import {
 import { downloadCsv, downloadTablePdf } from "@/lib/finance-export";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import { cn } from "@/lib/utils";
+
+export type PdfPageOrientation = "portrait" | "landscape";
 
 export function reportFileName(
   report: string,
@@ -26,36 +38,221 @@ export function reportFileName(
   });
 }
 
+const ORIENTATION_OPTIONS: {
+  id: PdfPageOrientation;
+  title: string;
+  hint: string;
+  pageClass: string;
+}[] = [
+  {
+    id: "portrait",
+    title: "Portrait",
+    hint: "Tall page · best for shorter tables and statements",
+    pageClass: "h-16 w-11",
+  },
+  {
+    id: "landscape",
+    title: "Landscape",
+    hint: "Wide page · best for multi-column ledgers and registers",
+    pageClass: "h-11 w-16",
+  },
+];
+
+export function ReportPdfLayoutDialog({
+  open,
+  mode,
+  reportLabel,
+  defaultOrientation = "landscape",
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  mode: "pdf" | "print" | null;
+  reportLabel: string;
+  defaultOrientation?: PdfPageOrientation;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (orientation: PdfPageOrientation) => void;
+}) {
+  const [orientation, setOrientation] = useState<PdfPageOrientation>(defaultOrientation);
+
+  useEffect(() => {
+    if (!open) return;
+    setOrientation(defaultOrientation);
+  }, [open, defaultOrientation]);
+
+  const isPrint = mode === "print";
+  const title = isPrint ? "Print layout" : "Download layout";
+  const confirmLabel = isPrint ? "Print PDF" : "Export PDF";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md rounded-2xl border border-[#E5E5E5] bg-white p-0">
+        <DialogHeader className="space-y-1 border-b border-[#F0F0F0] px-5 pb-4 pt-5 pr-12 text-left">
+          <DialogTitle className="text-[18px] font-semibold text-black">{title}</DialogTitle>
+          <DialogDescription className="text-[13px] leading-relaxed text-black/60">
+            Choose page orientation for {reportLabel}. You can still adjust the printer dialog
+            after this.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 px-5 py-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+            Page orientation
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            {ORIENTATION_OPTIONS.map((option) => {
+              const selected = orientation === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setOrientation(option.id)}
+                  className={cn(
+                    "rounded-2xl border px-3.5 py-3.5 text-left transition",
+                    selected
+                      ? "border-transparent bg-[#0F766E] text-white shadow-sm shadow-teal-900/10"
+                      : "border-[#E5E5E5] bg-white text-black/75 hover:border-black/25",
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "grid place-items-center rounded-lg",
+                        selected ? "bg-white/15" : "bg-[#F8FAFC]",
+                        option.id === "portrait" ? "h-14 w-12" : "h-12 w-16",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "rounded-[3px] border-2 shadow-sm",
+                          option.pageClass,
+                          selected
+                            ? "border-white/80 bg-white/25"
+                            : "border-[#0F766E]/35 bg-white",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "mx-auto mt-[18%] space-y-1",
+                            option.id === "portrait" ? "w-[58%]" : "w-[70%]",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "h-0.5 rounded-full",
+                              selected ? "bg-white/70" : "bg-[#0F766E]/35",
+                            )}
+                          />
+                          <div
+                            className={cn(
+                              "h-0.5 rounded-full",
+                              selected ? "bg-white/45" : "bg-[#0F766E]/20",
+                            )}
+                          />
+                          <div
+                            className={cn(
+                              "h-0.5 rounded-full",
+                              selected ? "bg-white/30" : "bg-[#0F766E]/15",
+                            )}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[14px] font-semibold">{option.title}</div>
+                      <div
+                        className={cn(
+                          "mt-0.5 text-[11px] leading-snug",
+                          selected ? "text-white/80" : "text-black/45",
+                        )}
+                      >
+                        {option.hint}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11.5px] leading-relaxed text-black/45">
+            {orientation === "landscape"
+              ? "Recommended for wide tables with many columns."
+              : "Recommended for compact summaries and statement-style reports."}
+          </p>
+        </div>
+
+        <DialogFooter className="flex-row justify-end gap-2 border-t border-[#F0F0F0] px-5 py-4">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+            onClick={() => {
+              onConfirm(orientation);
+              onOpenChange(false);
+            }}
+          >
+            {confirmLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ReportExportButtons({
   onCsv,
   onPdf,
   onPrint,
+  reportLabel = "this report",
+  defaultOrientation = "landscape",
 }: {
   onCsv: () => void;
-  onPdf: () => void;
-  onPrint: () => void;
+  onPdf: (landscape: boolean) => void;
+  onPrint: (landscape: boolean) => void;
+  reportLabel?: string;
+  defaultOrientation?: PdfPageOrientation;
 }) {
+  const [pendingMode, setPendingMode] = useState<"pdf" | "print" | null>(null);
   const quiet =
     "inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-1.5 text-[10.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:gap-1.5 sm:px-3 sm:text-[12px]";
   return (
-    <div className="grid w-full shrink-0 grid-cols-3 gap-1.5 sm:gap-2 lg:w-auto lg:min-w-[260px]">
-      <button type="button" onClick={onCsv} className={quiet}>
-        <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">Export CSV</span>
-      </button>
-      <button
-        type="button"
-        onClick={onPdf}
-        className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full bg-[#0F766E] px-2 py-1.5 text-[10.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:gap-1.5 sm:px-3 sm:text-[12px]"
-      >
-        <Download className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">Export PDF</span>
-      </button>
-      <button type="button" onClick={onPrint} className={quiet}>
-        <Printer className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">Print PDF</span>
-      </button>
-    </div>
+    <>
+      <div className="grid w-full shrink-0 grid-cols-3 gap-1.5 sm:gap-2 lg:w-auto lg:min-w-[260px]">
+        <button type="button" onClick={onCsv} className={quiet}>
+          <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Export CSV</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setPendingMode("pdf")}
+          className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full bg-[#0F766E] px-2 py-1.5 text-[10.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:gap-1.5 sm:px-3 sm:text-[12px]"
+        >
+          <Download className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Export PDF</span>
+        </button>
+        <button type="button" onClick={() => setPendingMode("print")} className={quiet}>
+          <Printer className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Print PDF</span>
+        </button>
+      </div>
+      <ReportPdfLayoutDialog
+        open={Boolean(pendingMode)}
+        mode={pendingMode}
+        reportLabel={reportLabel}
+        defaultOrientation={defaultOrientation}
+        onOpenChange={(next) => {
+          if (!next) setPendingMode(null);
+        }}
+        onConfirm={(orientation) => {
+          const landscape = orientation === "landscape";
+          if (pendingMode === "print") onPrint(landscape);
+          else onPdf(landscape);
+          setPendingMode(null);
+        }}
+      />
+    </>
   );
 }
 
@@ -235,6 +432,7 @@ export function exportReportFile({
   summary,
   schoolName,
   academicYear,
+  landscape,
 }: {
   format: "csv" | "pdf" | "print";
   filenameBase: string;
@@ -246,6 +444,7 @@ export function exportReportFile({
   summary: { label: string; value: string }[];
   schoolName: string;
   academicYear: string;
+  landscape?: boolean;
 }) {
   if (format === "csv") {
     downloadCsv(reportFileName(filenameBase, "csv", schoolName, academicYear), headers, rows);
@@ -259,7 +458,7 @@ export function exportReportFile({
     rows: rows.map((row) => row.map((cell) => String(cell))),
     summaryItems: summary,
     emptyMessage: "Nothing to export for this filter",
-    landscape: headers.length > 6,
+    landscape: landscape ?? headers.length > 6,
     action: format === "print" ? "print" : "download",
   });
 }

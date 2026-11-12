@@ -132,7 +132,7 @@ export function VehicleFeesReport() {
   const filtersActive =
     query.trim() !== "" || classFilter !== "all" || routeFilter !== "all" || shiftFilter !== "all";
 
-  const runExport = (format: "csv" | "pdf" | "print") => {
+  const runExport = (format: "csv" | "pdf" | "print", landscape?: boolean) => {
     const headers = [
       "ID",
       "Student",
@@ -175,6 +175,7 @@ export function VehicleFeesReport() {
       summary: summary.map(({ label, value }) => ({ label, value })),
       schoolName,
       academicYear,
+      landscape,
     });
     toast.success(format === "print" ? "Print dialog opened" : format === "csv" ? "CSV downloaded" : "PDF downloaded");
   };
@@ -190,9 +191,10 @@ export function VehicleFeesReport() {
             </p>
           </div>
           <ReportExportButtons
+            reportLabel="Vehicle Fees"
             onCsv={() => runExport("csv")}
-            onPdf={() => runExport("pdf")}
-            onPrint={() => runExport("print")}
+            onPdf={(landscape) => runExport("pdf", landscape)}
+            onPrint={(landscape) => runExport("print", landscape)}
           />
         </div>
         <ReportSummary items={summary} />

@@ -163,7 +163,10 @@ import {
   resolveFinancialYearInput,
 } from "@/components/school/FinancialYearFields";
 import { SignaturePadDialog } from "@/components/school/SignaturePadDialog";
-import { BankAccountsManager } from "@/components/school/BankAccountsManager";
+import {
+  AddBankLedgerDialog,
+  BankAccountsManager,
+} from "@/components/school/BankAccountsManager";
 import { AcademicsWorkspace } from "@/components/school/AcademicsWorkspace";
 import { OrgCurrencyCard } from "@/components/school/OrgCurrencyCard";
 import { OrgLanguageCard } from "@/components/school/OrgLanguageCard";
@@ -520,7 +523,12 @@ import {
   FINANCE_BULK_CHUNK,
   isFinanceBulkUnsupported,
 } from "@/lib/api/records";
-import { apiGlSyncCatalogs, type GlJournal } from "@/lib/api/general-ledger";
+import {
+  apiGlListAccounts,
+  apiGlSyncCatalogs,
+  type GlAccount,
+  type GlJournal,
+} from "@/lib/api/general-ledger";
 import {
   apiFetchDashboardSummary,
   apiSaveDashboardTodos,
@@ -670,6 +678,7 @@ type MadePayment = {
   desc: string;
   amount: number;
   mode: string;
+  bankAccountId?: string | null;
   payeeType: PayeeType;
   ledgerId?: string | null;
   staffId?: string;
@@ -685,6 +694,7 @@ function mapApiDisbursementToMadePayment(
     desc: string;
     amount: number;
     mode: string;
+    bankAccountId?: string | null;
     payeeType?: string;
     ledgerId?: string | null;
     staffId?: string;
@@ -700,6 +710,7 @@ function mapApiDisbursementToMadePayment(
     desc: row.desc,
     amount: row.amount,
     mode: row.mode,
+    bankAccountId: row.bankAccountId ?? null,
     payeeType: normalizePayeeType(row.payeeType),
     ledgerId: row.ledgerId ?? null,
     staffId: row.staffId?.trim() || undefined,
@@ -709,6 +720,28 @@ function mapApiDisbursementToMadePayment(
       ? (row.attachments as PaymentAttachment[])
       : undefined,
   };
+}
+
+function paymentModeNeedsBank(mode: string) {
+  const value = mode.trim().toLowerCase();
+  return (
+    value === "bank" ||
+    value === "both" ||
+    value === "online" ||
+    value.includes("upi") ||
+    value.includes("card")
+  );
+}
+
+function bankAccountOptionLabel(account: GlAccount) {
+  const bank = (account.bankName || "").trim();
+  const ledger = account.name.trim();
+  const title = bank && bank.toLowerCase() !== ledger.toLowerCase() ? `${ledger} · ${bank}` : ledger;
+  const tail =
+    account.bankAccountNo && account.bankAccountNo.length >= 4
+      ? ` · …${account.bankAccountNo.slice(-4)}`
+      : "";
+  return `${title}${tail}`;
 }
 
 const MAX_PAYMENT_ATTACHMENTS = 8;
@@ -10828,6 +10861,11 @@ function PaymentModeControls({
   onBankChange,
   onCashChange,
   modes = RECEIVE_PAYMENT_MODES,
+  bankAccounts = [],
+  bankAccountId = "",
+  onBankAccountChange,
+  onBankCreated,
+  banksLoading = false,
 }: {
   mode: string;
   onModeChange: (next: string) => void;
@@ -10836,7 +10874,25 @@ function PaymentModeControls({
   onBankChange: (next: string) => void;
   onCashChange: (next: string) => void;
   modes?: readonly string[];
+  bankAccounts?: GlAccount[];
+  bankAccountId?: string;
+  onBankAccountChange?: (next: string) => void;
+  onBankCreated?: (account: GlAccount) => void;
+  banksLoading?: boolean;
 }) {
+  const [addBankOpen, setAddBankOpen] = useState(false);
+  const needsBank = paymentModeNeedsBank(mode);
+  const bankOptions = useMemo(
+    () =>
+      bankAccounts
+        .filter((account) => account.isBank && account.active)
+        .map((account) => ({
+          value: account.id,
+          label: bankAccountOptionLabel(account),
+        })),
+    [bankAccounts],
+  );
+
   return (
     <>
       <FieldLabel>Payment Mode</FieldLabel>
@@ -10860,6 +10916,45 @@ function PaymentModeControls({
           );
         })}
       </div>
+      {needsBank && onBankAccountChange ? (
+        <div className="mt-2">
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-black/45">
+            Bank account
+          </div>
+          <FieldSelect
+            value={bankAccountId}
+            onValueChange={onBankAccountChange}
+            options={bankOptions}
+            placeholder={
+              banksLoading
+                ? "Loading banks…"
+                : bankOptions.length
+                  ? "Choose bank account"
+                  : "No bank accounts yet"
+            }
+            disabled={banksLoading}
+            searchable={bankOptions.length > 6}
+            searchPlaceholder="Search banks…"
+            onAddNew={() => setAddBankOpen(true)}
+            addNewLabel="Add bank"
+          />
+          <p className="mt-1.5 text-[11px] text-black/45">
+            {!banksLoading && bankOptions.length === 0
+              ? "No banks yet · tap Add bank above, or manage them in Settings."
+              : mode === "Both"
+                ? "Bank split posts to this account · cash split uses Cash in hand."
+                : "This receipt or payment posts to the selected bank ledger."}
+          </p>
+          <AddBankLedgerDialog
+            open={addBankOpen}
+            onOpenChange={setAddBankOpen}
+            onCreated={(account) => {
+              onBankCreated?.(account);
+              onBankAccountChange(account.id);
+            }}
+          />
+        </div>
+      ) : null}
       {mode === "Both" && (
         <div className="mt-2 grid grid-cols-2 gap-2">
           <div>
@@ -10910,6 +11005,7 @@ function ReceivePayment() {
     studentFeeBreaks,
     academicYear,
     schoolDetails,
+    activeBranchId,
   } = useTenantStore();
   const isAdmin = session?.role === "school_admin" || session?.role === "super_admin";
   const schoolName = schoolDetails.name || "Silver Hills Global";
@@ -10947,6 +11043,9 @@ function ReceivePayment() {
     createFeeLineItem({ description: defaultCategory }),
   ]);
   const [mode, setMode] = useState("Bank");
+  const [bankAccounts, setBankAccounts] = useState<GlAccount[]>([]);
+  const [banksLoading, setBanksLoading] = useState(false);
+  const [bankAccountId, setBankAccountId] = useState("");
   const [bankSplitAmount, setBankSplitAmount] = useState("");
   const [cashSplitAmount, setCashSplitAmount] = useState("");
   const [narration, setNarration] = useState("");
@@ -10955,6 +11054,31 @@ function ReceivePayment() {
   const [receiptTime, setReceiptTime] = useState(() => formatReceiptDateTimeNow());
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
   const [historyQuery, setHistoryQuery] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setBanksLoading(true);
+    void apiGlListAccounts(true)
+      .then((rows) => {
+        if (cancelled) return;
+        const banks = (Array.isArray(rows) ? rows : []).filter((row) => row.isBank && row.active);
+        setBankAccounts(banks);
+        setBankAccountId((prev) => {
+          if (prev && banks.some((bank) => bank.id === prev)) return prev;
+          return banks[0]?.id ?? "";
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBankAccounts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setBanksLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBranchId]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const recordCardRef = useRef<HTMLDivElement>(null);
   const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
@@ -12090,6 +12214,24 @@ function ReceivePayment() {
       setBankSplitAmount("");
       setCashSplitAmount("");
     }
+    if (paymentModeNeedsBank(next)) {
+      setBankAccountId((prev) =>
+        prev && bankAccounts.some((bank) => bank.id === prev)
+          ? prev
+          : (bankAccounts[0]?.id ?? ""),
+      );
+    }
+  };
+
+  const requireBankAccountSelection = () => {
+    if (!paymentModeNeedsBank(mode)) return true;
+    if (bankAccountId.trim()) return true;
+    toast.error(
+      bankAccounts.length
+        ? "Choose which bank account to use"
+        : "Add a bank account in Settings before recording a bank payment",
+    );
+    return false;
   };
 
   const addAttachments = async (fileList: FileList | null) => {
@@ -12264,6 +12406,7 @@ function ReceivePayment() {
     setBankSplitAmount("");
     setCashSplitAmount("");
     setMode("Bank");
+    setBankAccountId(bankAccounts[0]?.id ?? "");
     const resetPeriod = defaultFeePeriod(
       feeTerms,
       defaultCategory,
@@ -12301,6 +12444,10 @@ function ReceivePayment() {
     setPayerAddress(payment.payerAddress ?? "");
     setPayerPhone(payment.payerPhone ?? "");
     setAttachments(payment.attachments ? [...payment.attachments] : []);
+    setBankAccountId(
+      payment.bankAccountId ||
+        (paymentModeNeedsBank(payment.mode || "Bank") ? bankAccounts[0]?.id ?? "" : ""),
+    );
     setBankSplitAmount(payment.mode === "Both" ? parsed.bankSplit : "");
     setCashSplitAmount(payment.mode === "Both" ? parsed.cashSplit : "");
     setExternalPayer(payment.name);
@@ -12411,6 +12558,7 @@ function ReceivePayment() {
       toast.error("Bank and cash amounts must add up to the total");
       return;
     }
+    if (!requireBankAccountSelection()) return;
 
     const stamp = toSqlDateTime(receiptTime.trim());
     const extras: string[] = [];
@@ -12467,6 +12615,7 @@ function ReceivePayment() {
       name: isExternal ? externalPayer.trim() : (selected?.name ?? stu.trim()),
       cat: primaryCategory,
       mode,
+      bankAccountId: paymentModeNeedsBank(mode) ? bankAccountId || null : null,
       amount: value,
       time: stamp,
       academicYear: editingPayment.academicYear ?? academicYear,
@@ -12531,6 +12680,7 @@ function ReceivePayment() {
       toast.error("Bank and cash amounts must add up to the total");
       return;
     }
+    if (!requireBankAccountSelection()) return;
     if (mode === "Online") {
       if (isExternal) {
         toast.error("Online payment is for students only");
@@ -12579,6 +12729,7 @@ function ReceivePayment() {
         name: payer,
         cat: primaryCategory,
         mode,
+        bankAccountId: paymentModeNeedsBank(mode) ? bankAccountId || null : null,
         amount: value,
         time: stamp,
         academicYear,
@@ -12656,6 +12807,7 @@ function ReceivePayment() {
       name: selected.name,
       cat: primaryCategory,
       mode,
+      bankAccountId: paymentModeNeedsBank(mode) ? bankAccountId || null : null,
       amount: value,
       time: stamp,
       academicYear,
@@ -13229,6 +13381,16 @@ function ReceivePayment() {
                       onBankChange={setBankSplitAmount}
                       onCashChange={setCashSplitAmount}
                       modes={MAKE_PAYMENT_MODES}
+                      bankAccounts={bankAccounts}
+                      bankAccountId={bankAccountId}
+                      onBankAccountChange={setBankAccountId}
+                      onBankCreated={(account) => {
+                        setBankAccounts((prev) => {
+                          if (prev.some((row) => row.id === account.id)) return prev;
+                          return [...prev, account];
+                        });
+                      }}
+                      banksLoading={banksLoading}
                     />
                     {mode === "Both" && !splitOk && recordTotal > 0 && (
                       <p className="mt-1.5 text-[10.5px] text-red-600">
@@ -13627,6 +13789,16 @@ function ReceivePayment() {
                       modes={
                         editingPayment ? MAKE_PAYMENT_MODES : RECEIVE_PAYMENT_MODES
                       }
+                      bankAccounts={bankAccounts}
+                      bankAccountId={bankAccountId}
+                      onBankAccountChange={setBankAccountId}
+                      onBankCreated={(account) => {
+                        setBankAccounts((prev) => {
+                          if (prev.some((row) => row.id === account.id)) return prev;
+                          return [...prev, account];
+                        });
+                      }}
+                      banksLoading={banksLoading}
                     />
                     {mode === "Both" && !splitOk && recordTotal > 0 && (
                       <p className="mt-1.5 text-[10.5px] text-red-600">
@@ -14738,8 +14910,12 @@ function MakePayment() {
   const [newLedgerName, setNewLedgerName] = useState("");
   const [creatingLedger, setCreatingLedger] = useState(false);
   const [description, setDescription] = useState("");
+  const [paymentTime, setPaymentTime] = useState(() => formatReceiptDateTimeNow());
   const [amount, setAmount] = useState(search.amount ?? "");
   const [mode, setMode] = useState("Bank");
+  const [bankAccounts, setBankAccounts] = useState<GlAccount[]>([]);
+  const [banksLoading, setBanksLoading] = useState(false);
+  const [bankAccountId, setBankAccountId] = useState("");
   const [bankSplitAmount, setBankSplitAmount] = useState("");
   const [cashSplitAmount, setCashSplitAmount] = useState("");
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
@@ -14754,6 +14930,7 @@ function MakePayment() {
     desc: "",
     amount: "",
     mode: "UPI Business",
+    bankAccountId: "" as string,
     payeeType: "Other Expense" as PayeeType,
     ledgerId: "" as string,
     status: "Queued" as "Queued" | "Cleared",
@@ -14777,7 +14954,39 @@ function MakePayment() {
       setBankSplitAmount("");
       setCashSplitAmount("");
     }
+    if (paymentModeNeedsBank(next)) {
+      setBankAccountId((prev) =>
+        prev && bankAccounts.some((bank) => bank.id === prev)
+          ? prev
+          : (bankAccounts[0]?.id ?? ""),
+      );
+    }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    setBanksLoading(true);
+    void apiGlListAccounts(true)
+      .then((rows) => {
+        if (cancelled) return;
+        const banks = (Array.isArray(rows) ? rows : []).filter((row) => row.isBank && row.active);
+        setBankAccounts(banks);
+        setBankAccountId((prev) => {
+          if (prev && banks.some((bank) => bank.id === prev)) return prev;
+          return banks[0]?.id ?? "";
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBankAccounts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setBanksLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBranchId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -15078,8 +15287,10 @@ function MakePayment() {
     setBeneficiary("");
     setSelectedLedgerId("");
     setDescription("");
+    setPaymentTime(formatReceiptDateTimeNow());
     setAmount("");
     setMode("Bank");
+    setBankAccountId(bankAccounts[0]?.id ?? "");
     setBankSplitAmount("");
     setCashSplitAmount("");
     setAttachments([]);
@@ -15173,8 +15384,8 @@ function MakePayment() {
       toast.error("Choose an expense ledger");
       return;
     }
-    if (!description.trim()) {
-      toast.error("Description is required");
+    if (!paymentTime.trim()) {
+      toast.error("Date / time is required");
       return;
     }
     if (!value || value <= 0) {
@@ -15185,6 +15396,14 @@ function MakePayment() {
       toast.error("Bank and cash amounts must add up to the total");
       return;
     }
+    if (paymentModeNeedsBank(mode) && !bankAccountId.trim()) {
+      toast.error(
+        bankAccounts.length
+          ? "Choose which bank account to use"
+          : "Add a bank account in Settings before recording a bank payment",
+      );
+      return;
+    }
     // Ensure salary month is reflected on the disbursal line
     if (
       payeeType === "Salary" &&
@@ -15192,7 +15411,11 @@ function MakePayment() {
       !description.toLowerCase().includes(formatPayrollMonthLabel(salaryMonth).toLowerCase()) &&
       !description.includes(salaryMonth)
     ) {
-      setDescription((prev) => `${prev.trim()} · ${formatPayrollMonthLabel(salaryMonth)}`);
+      const monthLabel = formatPayrollMonthLabel(salaryMonth);
+      setDescription((prev) => {
+        const base = prev.trim();
+        return base ? `${base} · ${monthLabel}` : monthLabel;
+      });
     }
     setPendingPayAction(action);
   };
@@ -15200,8 +15423,13 @@ function MakePayment() {
   const confirmAuthorisation = () => {
     if (isSubmitting || !pendingPayAction) return;
     const value = Number(amount.replace(/[^0-9]/g, ""));
-    if (!beneficiary.trim() || !description.trim() || !value || value <= 0) {
+    if (!beneficiary.trim() || !value || value <= 0) {
       toast.error("Complete all required fields before confirming");
+      setPendingPayAction(null);
+      return;
+    }
+    if (!paymentTime.trim()) {
+      toast.error("Date / time is required");
       setPendingPayAction(null);
       return;
     }
@@ -15213,13 +15441,14 @@ function MakePayment() {
     setPendingPayAction(null);
 
     let desc = description.trim();
-    if (
-      payeeType === "Salary" &&
-      salaryMonth &&
-      !desc.toLowerCase().includes(formatPayrollMonthLabel(salaryMonth).toLowerCase()) &&
-      !desc.includes(salaryMonth)
-    ) {
-      desc = `${desc} · ${formatPayrollMonthLabel(salaryMonth)}`;
+    if (payeeType === "Salary" && salaryMonth) {
+      const monthLabel = formatPayrollMonthLabel(salaryMonth);
+      if (
+        !desc.toLowerCase().includes(monthLabel.toLowerCase()) &&
+        !desc.includes(salaryMonth)
+      ) {
+        desc = desc ? `${desc} · ${monthLabel}` : monthLabel;
+      }
     }
     if (mode === "Both") {
       desc = [
@@ -15231,6 +15460,7 @@ function MakePayment() {
         .join(" · ");
     }
 
+    const paidStamp = toSqlDateTime(paymentTime.trim());
     const localId = `pending-${Date.now()}`;
     const disbursal: MadePayment = {
       id: localId,
@@ -15238,10 +15468,11 @@ function MakePayment() {
       desc,
       amount: value,
       mode,
+      bankAccountId: paymentModeNeedsBank(mode) ? bankAccountId || null : null,
       payeeType,
       ledgerId: payeeType === "Other Expense" ? selectedLedgerId || null : null,
       staffId: payeeType === "Salary" ? selectedStaffId || undefined : undefined,
-      time: toSqlDateTime(new Date()),
+      time: paidStamp,
       status: payStatus,
       attachments: attachments.length ? attachments : undefined,
     };
@@ -15256,6 +15487,7 @@ function MakePayment() {
       desc: disbursal.desc,
       amount: disbursal.amount,
       mode: disbursal.mode,
+      bankAccountId: disbursal.bankAccountId,
       payeeType: disbursal.payeeType,
       ledgerId: disbursal.ledgerId,
       time: disbursal.time,
@@ -15273,6 +15505,7 @@ function MakePayment() {
           desc: saved?.desc || disbursal.desc,
           amount: saved?.amount || disbursal.amount,
           mode: saved?.mode || disbursal.mode,
+          bankAccountId: saved?.bankAccountId ?? disbursal.bankAccountId,
           payeeType: saved?.payeeType ? normalizePayeeType(saved.payeeType) : disbursal.payeeType,
           ledgerId: saved?.ledgerId ?? disbursal.ledgerId,
           time: saved?.time || disbursal.time,
@@ -15296,7 +15529,7 @@ function MakePayment() {
       );
 
     if (payeeType === "Salary" && selectedStaffId) {
-      const paidAt = new Date().toISOString().slice(0, 10);
+      const paidAt = paidStamp.slice(0, 10);
       const working = Math.max(0, Math.round(Number(workingDays) || 0));
       const present = Math.max(0, Math.round(Number(daysPresent) || 0));
       const paidLeave = Math.max(0, Math.round(Number(paidLeaveDays) || 0));
@@ -15311,11 +15544,13 @@ function MakePayment() {
               unpaidLeaveDays: unpaidLeave,
             })
           : null;
+      const monthLabel = formatPayrollMonthLabel(salaryMonth);
       const historyDesc =
-        desc.includes(salaryMonth) ||
-        desc.toLowerCase().includes(formatPayrollMonthLabel(salaryMonth).toLowerCase())
+        desc.includes(salaryMonth) || desc.toLowerCase().includes(monthLabel.toLowerCase())
           ? desc
-          : `${desc} · ${formatPayrollMonthLabel(salaryMonth)}`;
+          : desc
+            ? `${desc} · ${monthLabel}`
+            : monthLabel;
       setStaff((prev) =>
         prev.map((member) => {
           if (member.id !== selectedStaffId) return member;
@@ -15744,6 +15979,9 @@ function MakePayment() {
       mode: MAKE_PAYMENT_MODES.includes(payment.mode as (typeof MAKE_PAYMENT_MODES)[number])
         ? payment.mode
         : payment.mode || "Bank",
+      bankAccountId:
+        payment.bankAccountId ||
+        (paymentModeNeedsBank(payment.mode || "Bank") ? bankAccounts[0]?.id ?? "" : ""),
       payeeType: payment.payeeType,
       ledgerId: matchedLedger,
       status: payment.status,
@@ -15799,10 +16037,6 @@ function MakePayment() {
       toast.error("Choose an expense ledger");
       return;
     }
-    if (!desc) {
-      toast.error("Description is required");
-      return;
-    }
     if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
       toast.error("Enter a valid amount");
       return;
@@ -15816,6 +16050,14 @@ function MakePayment() {
       !splitMatchesTotal(modeValue, bankSplitAmount, cashSplitAmount, nextAmount)
     ) {
       toast.error("Bank and cash amounts must add up to the total");
+      return;
+    }
+    if (paymentModeNeedsBank(modeValue) && !disbursalEditForm.bankAccountId.trim()) {
+      toast.error(
+        bankAccounts.length
+          ? "Choose which bank account to use"
+          : "Add a bank account in Settings before recording a bank payment",
+      );
       return;
     }
     if (!disbursalEditForm.date || !disbursalEditForm.clock) {
@@ -15840,6 +16082,9 @@ function MakePayment() {
       desc: nextDesc,
       amount: nextAmount,
       mode: modeValue,
+      bankAccountId: paymentModeNeedsBank(modeValue)
+        ? disbursalEditForm.bankAccountId || null
+        : null,
       payeeType: disbursalEditForm.payeeType,
       ledgerId:
         disbursalEditForm.payeeType === "Other Expense" ? disbursalEditForm.ledgerId || null : null,
@@ -16117,16 +16362,23 @@ function MakePayment() {
               </div>
             </div>
           )}
-          <div className={payeeType === "Salary" ? "sm:col-span-2" : "sm:col-span-2"}>
-            <FieldLabel>Description / Line Items</FieldLabel>
+          <div className="sm:col-span-2">
+            <FieldLabel>
+              Description / Line Items{" "}
+              <span className="normal-case tracking-normal text-black/40">(optional)</span>
+            </FieldLabel>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the payment purpose"
+              placeholder="Optional · payment purpose or line items"
               className="min-h-[80px] w-full rounded-lg border border-[#E5E5E5] bg-white px-3 py-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-black/15"
             />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)] sm:items-start">
+            <div>
+              <FieldLabel>Date / Time</FieldLabel>
+              <ReceiptDateTimePicker value={paymentTime} onChange={setPaymentTime} />
+            </div>
             <div>
               <FieldLabel>{moneyColumnLabel("Amount")}</FieldLabel>
               <Input
@@ -16137,22 +16389,32 @@ function MakePayment() {
                 className="font-mono"
               />
             </div>
-            <div>
-              <PaymentModeControls
-                mode={mode}
-                onModeChange={handleModeChange}
-                bankSplitAmount={bankSplitAmount}
-                cashSplitAmount={cashSplitAmount}
-                onBankChange={setBankSplitAmount}
-                onCashChange={setCashSplitAmount}
-                modes={MAKE_PAYMENT_MODES}
-              />
-              {mode === "Both" && !splitOk && paymentTotal > 0 && (
-                <p className="mt-1.5 text-[10.5px] text-red-600">
-                  Bank + Cash must equal {formatMoney(paymentTotal)}
-                </p>
-              )}
-            </div>
+          </div>
+          <div className="sm:col-span-2">
+            <PaymentModeControls
+              mode={mode}
+              onModeChange={handleModeChange}
+              bankSplitAmount={bankSplitAmount}
+              cashSplitAmount={cashSplitAmount}
+              onBankChange={setBankSplitAmount}
+              onCashChange={setCashSplitAmount}
+              modes={MAKE_PAYMENT_MODES}
+              bankAccounts={bankAccounts}
+              bankAccountId={bankAccountId}
+              onBankAccountChange={setBankAccountId}
+              onBankCreated={(account) => {
+                setBankAccounts((prev) => {
+                  if (prev.some((row) => row.id === account.id)) return prev;
+                  return [...prev, account];
+                });
+              }}
+              banksLoading={banksLoading}
+            />
+            {mode === "Both" && !splitOk && paymentTotal > 0 && (
+              <p className="mt-1.5 text-[10.5px] text-red-600">
+                Bank + Cash must equal {formatMoney(paymentTotal)}
+              </p>
+            )}
           </div>
 
           <div className="sm:col-span-2">
@@ -16506,13 +16768,15 @@ function MakePayment() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                Description
+                Description{" "}
+                <span className="normal-case tracking-normal text-black/40">(optional)</span>
               </Label>
               <Textarea
                 value={disbursalEditForm.desc}
                 onChange={(e) =>
                   setDisbursalEditForm({ ...disbursalEditForm, desc: e.target.value })
                 }
+                placeholder="Optional · payment purpose or line items"
                 className="min-h-[72px] resize-none"
               />
             </div>
@@ -16581,7 +16845,13 @@ function MakePayment() {
                 <PaymentModeControls
                   mode={disbursalEditForm.mode}
                   onModeChange={(modeValue) => {
-                    setDisbursalEditForm({ ...disbursalEditForm, mode: modeValue });
+                    setDisbursalEditForm({
+                      ...disbursalEditForm,
+                      mode: modeValue,
+                      bankAccountId: paymentModeNeedsBank(modeValue)
+                        ? disbursalEditForm.bankAccountId || bankAccounts[0]?.id || ""
+                        : "",
+                    });
                     if (modeValue !== "Both") {
                       setBankSplitAmount("");
                       setCashSplitAmount("");
@@ -16592,6 +16862,19 @@ function MakePayment() {
                   onBankChange={setBankSplitAmount}
                   onCashChange={setCashSplitAmount}
                   modes={MAKE_PAYMENT_MODES}
+                  bankAccounts={bankAccounts}
+                  bankAccountId={disbursalEditForm.bankAccountId}
+                  onBankAccountChange={(next) =>
+                    setDisbursalEditForm({ ...disbursalEditForm, bankAccountId: next })
+                  }
+                  onBankCreated={(account) => {
+                    setBankAccounts((prev) => {
+                      if (prev.some((row) => row.id === account.id)) return prev;
+                      return [...prev, account];
+                    });
+                    setDisbursalEditForm((prev) => ({ ...prev, bankAccountId: account.id }));
+                  }}
+                  banksLoading={banksLoading}
                 />
                 {disbursalEditForm.mode === "Both" &&
                   !splitMatchesTotal(

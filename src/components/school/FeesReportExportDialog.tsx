@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { PdfPageOrientation } from "@/components/school/finance/report-chrome";
 import type { FeeSheetColumn, FeeSheetPaymentCounts, FeeSheetPaymentFilter } from "@/lib/class-fee-sheet";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ export type FeesExportChoice = {
   columns: FeeSheetColumn[];
   paymentStatus: FeeSheetPaymentFilter;
   classes: string[];
+  landscape?: boolean;
 };
 
 export type FeesExportClassOption = {
@@ -59,13 +61,16 @@ export function FeesReportExportDialog({
 }) {
   const [mode, setMode] = useState<"full" | "selected">("full");
   const [paymentStatus, setPaymentStatus] = useState<FeeSheetPaymentFilter>("all");
+  const [orientation, setOrientation] = useState<PdfPageOrientation>("landscape");
   const [pickedClasses, setPickedClasses] = useState<Set<string>>(() => new Set());
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const needsOrientation = format === "pdf" || format === "print";
 
   useEffect(() => {
     if (!open) return;
     setMode("full");
     setPaymentStatus("all");
+    setOrientation("landscape");
     setPickedClasses(new Set(classes.map((item) => item.name)));
   }, [open, classes]);
 
@@ -307,6 +312,76 @@ export function FeesReportExportDialog({
             })}
           </div>
 
+          {needsOrientation ? (
+            <div>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                Page orientation
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    {
+                      id: "portrait" as const,
+                      title: "Portrait",
+                      hint: "Tall page · shorter schedules",
+                    },
+                    {
+                      id: "landscape" as const,
+                      title: "Landscape",
+                      hint: "Wide page · many fee columns",
+                    },
+                  ] as const
+                ).map((option) => {
+                  const selected = orientation === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setOrientation(option.id)}
+                      className={cn(
+                        "rounded-xl border px-3 py-2.5 text-left transition",
+                        selected
+                          ? "border-transparent bg-[#0F766E] text-white shadow-sm"
+                          : "border-[#E5E5E5] bg-white text-black/70 hover:border-black/30",
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={cn(
+                            "grid place-items-center rounded-lg",
+                            selected ? "bg-white/15" : "bg-[#F8FAFC]",
+                            option.id === "portrait" ? "h-12 w-10" : "h-10 w-14",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "rounded-[3px] border-2",
+                              option.id === "portrait" ? "h-8 w-6" : "h-6 w-10",
+                              selected
+                                ? "border-white/80 bg-white/25"
+                                : "border-[#0F766E]/35 bg-white",
+                            )}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-semibold">{option.title}</div>
+                          <div
+                            className={cn(
+                              "mt-0.5 text-[11px]",
+                              selected ? "text-white/80" : "text-black/45",
+                            )}
+                          >
+                            {option.hint}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           {mode === "selected" ? (
             <div className="space-y-4">
               <ColumnGroup
@@ -367,6 +442,7 @@ export function FeesReportExportDialog({
                 columns: selectedColumns,
                 paymentStatus,
                 classes: selectedClassNames,
+                landscape: needsOrientation ? orientation === "landscape" : undefined,
               })
             }
           >

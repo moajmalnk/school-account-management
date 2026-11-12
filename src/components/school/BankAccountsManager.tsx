@@ -67,6 +67,370 @@ const EMPTY_BANK_FORM: BankFormState = {
   micr: "",
 };
 
+/** Create-only bank ledger dialog · shared by Settings and payment bank pickers. */
+export function AddBankLedgerDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated?: (account: GlAccount) => void;
+}) {
+  const { academicYear } = useTenantStore();
+  const [bankGroupId, setBankGroupId] = useState("");
+  const [form, setForm] = useState<BankFormState>(EMPTY_BANK_FORM);
+  const [saving, setSaving] = useState(false);
+  const [ifscLoading, setIfscLoading] = useState(false);
+  const [ifscFetched, setIfscFetched] = useState(false);
+  const lastAutoIfscRef = useRef("");
+
+  const resetForm = () => {
+    setForm(EMPTY_BANK_FORM);
+    setIfscFetched(false);
+    setIfscLoading(false);
+    lastAutoIfscRef.current = "";
+  };
+
+  const patchForm = (patch: Partial<BankFormState>) => {
+    setForm((prev) => ({ ...prev, ...patch }));
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    resetForm();
+    if (!getApiToken()) return;
+    void apiGlChartTree()
+      .then((tree) => {
+        const bankGroup =
+          tree.groups.find((g) => /bank accounts/i.test(g.name) && !/od/i.test(g.name)) ??
+          tree.groups.find((g) => g.nature === "asset" && /bank/i.test(g.name));
+        setBankGroupId(bankGroup?.id ?? "");
+      })
+      .catch(() => setBankGroupId(""));
+  }, [open]);
+
+  const handleLookupIfsc = async (raw = form.ifsc) => {
+    const code = normalizeIfsc(raw);
+    if (!isValidIfsc(code)) {
+      toast.error("Enter a valid IFSC", { description: "11 characters · e.g. HDFC0001234" });
+      return;
+    }
+    setIfscLoading(true);
+    try {
+      const details = await fetchIfscDetails(code);
+      lastAutoIfscRef.current = code;
+      setForm((prev) => {
+        const suggested =
+          prev.ledgerName.trim() ||
+          [details.bankName, details.branch].filter(Boolean).join(" · ").slice(0, 80);
+        return {
+          ...prev,
+          ifsc: details.ifsc,
+          bankName: details.bankName,
+          branch: details.branch,
+          address: details.address,
+          city: details.city,
+          state: details.state,
+          micr: details.micr || "",
+          ledgerName: suggested,
+        };
+      });
+      setIfscFetched(true);
+      toast.success("Bank details fetched", {
+        description: `${details.bankName}${details.branch ? ` · ${details.branch}` : ""}`,
+      });
+    } catch (e) {
+      lastAutoIfscRef.current = code;
+      setIfscFetched(false);
+      toast.error(e instanceof Error ? e.message : "IFSC lookup failed");
+    } finally {
+      setIfscLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const code = normalizeIfsc(form.ifsc);
+    if (!isValidIfsc(code) || ifscLoading) return;
+    if (lastAutoIfscRef.current === code) return;
+    const timer = window.setTimeout(() => {
+      void handleLookupIfsc(code);
+    }, 450);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce IFSC only
+  }, [open, form.ifsc, ifscLoading]);
+
+  const handleSave = async () => {
+    const ledgerName = form.ledgerName.trim();
+    const ifsc = normalizeIfsc(form.ifsc);
+    const accountNo = form.accountNo.replace(/\s+/g, "");
+    if (!ledgerName) {
+      toast.error("Enter a ledger name");
+      return;
+    }
+    if (!isValidIfsc(ifsc)) {
+      toast.error("Enter a valid IFSC code");
+      return;
+    }
+    if (!accountNo || accountNo.length < 6) {
+      toast.error("Enter the bank account number");
+      return;
+    }
+    if (!form.bankName.trim()) {
+      toast.error("Fetch IFSC details or enter the bank name");
+      return;
+    }
+    if (!bankGroupId) {
+      toast.error("Bank Accounts group missing", {
+        description: "Open Ledgers and tap Update all books, then try again",
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const created = await apiGlCreateAccount({
+        name: ledgerName,
+        groupId: bankGroupId,
+        academicYear: academicYear || undefined,
+        bankName: form.bankName.trim(),
+        bankAccountNo: accountNo,
+        bankIfsc: ifsc,
+        bankBranch: form.branch.trim() || undefined,
+        bankAccountHolder: form.accountHolder.trim() || undefined,
+        bankAccountType: form.accountType,
+        bankAddress: form.address.trim() || undefined,
+        bankCity: form.city.trim() || undefined,
+        bankState: form.state.trim() || undefined,
+        bankMicr: form.micr.trim() || undefined,
+      });
+      toast.success("Bank ledger added", { description: ledgerName });
+      onOpenChange(false);
+      resetForm();
+      onCreated?.(created);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save bank");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) resetForm();
+      }}
+    >
+      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="space-y-1 border-b border-[#EFEFEF] px-5 py-4 dark:border-white/10">
+          <DialogTitle>Add bank ledger</DialogTitle>
+          <DialogDescription>
+            Enter IFSC to autofill bank details, then confirm account number and ledger name.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid grid-cols-1 gap-x-3 gap-y-2.5 px-5 py-4 sm:grid-cols-6">
+          <div className="space-y-1 sm:col-span-4">
+            <Label htmlFor="add-bank-ifsc" className="text-[11px]">
+              IFSC code
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                id="add-bank-ifsc"
+                value={form.ifsc}
+                onChange={(e) => {
+                  const next = normalizeIfsc(e.target.value).slice(0, 11);
+                  patchForm({ ifsc: next });
+                  setIfscFetched(false);
+                  lastAutoIfscRef.current = "";
+                }}
+                onBlur={() => {
+                  if (isValidIfsc(form.ifsc) && !ifscFetched && !ifscLoading) {
+                    void handleLookupIfsc(form.ifsc);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleLookupIfsc(form.ifsc);
+                  }
+                }}
+                placeholder="HDFC0001234"
+                className="h-9 flex-1 rounded-xl font-mono uppercase tracking-wide"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 shrink-0 rounded-xl px-3 text-[12px]"
+                disabled={ifscLoading || !isValidIfsc(form.ifsc)}
+                onClick={() => void handleLookupIfsc(form.ifsc)}
+              >
+                {ifscLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fetch"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor="add-bank-type" className="text-[11px]">
+              Account type
+            </Label>
+            <Select
+              value={form.accountType}
+              onValueChange={(v) => patchForm({ accountType: v as BankAccountType })}
+            >
+              <SelectTrigger id="add-bank-type" className="h-9 rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="current">Current</SelectItem>
+                <SelectItem value="savings">Savings</SelectItem>
+                <SelectItem value="od">Overdraft</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1 sm:col-span-3">
+            <Label htmlFor="add-bank-name" className="text-[11px]">
+              Bank name
+            </Label>
+            <Input
+              id="add-bank-name"
+              value={form.bankName}
+              onChange={(e) => patchForm({ bankName: e.target.value })}
+              placeholder="Fetched from IFSC"
+              className="h-9 rounded-xl"
+            />
+          </div>
+
+          <div className="space-y-1 sm:col-span-3">
+            <Label htmlFor="add-bank-branch" className="text-[11px]">
+              Branch
+            </Label>
+            <Input
+              id="add-bank-branch"
+              value={form.branch}
+              onChange={(e) => patchForm({ branch: e.target.value })}
+              placeholder="Branch"
+              className="h-9 rounded-xl"
+            />
+          </div>
+
+          <div className="space-y-1 sm:col-span-3">
+            <Label htmlFor="add-bank-no" className="text-[11px]">
+              Account number
+            </Label>
+            <Input
+              id="add-bank-no"
+              value={form.accountNo}
+              onChange={(e) =>
+                patchForm({ accountNo: e.target.value.replace(/[^\d]/g, "").slice(0, 24) })
+              }
+              placeholder="Account number"
+              className="h-9 rounded-xl font-mono"
+              inputMode="numeric"
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="space-y-1 sm:col-span-3">
+            <Label htmlFor="add-bank-holder" className="text-[11px]">
+              Account holder
+            </Label>
+            <Input
+              id="add-bank-holder"
+              value={form.accountHolder}
+              onChange={(e) => patchForm({ accountHolder: e.target.value })}
+              placeholder="School / trust name"
+              className="h-9 rounded-xl"
+            />
+          </div>
+
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor="add-bank-city" className="text-[11px]">
+              City
+            </Label>
+            <Input
+              id="add-bank-city"
+              value={form.city}
+              onChange={(e) => patchForm({ city: e.target.value })}
+              placeholder="City"
+              className="h-9 rounded-xl"
+            />
+          </div>
+
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor="add-bank-state" className="text-[11px]">
+              State
+            </Label>
+            <Input
+              id="add-bank-state"
+              value={form.state}
+              onChange={(e) => patchForm({ state: e.target.value })}
+              placeholder="State"
+              className="h-9 rounded-xl"
+            />
+          </div>
+
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor="add-bank-address" className="text-[11px]">
+              Branch address
+            </Label>
+            <Input
+              id="add-bank-address"
+              value={form.address}
+              onChange={(e) => patchForm({ address: e.target.value })}
+              placeholder="From IFSC"
+              className="h-9 rounded-xl"
+            />
+          </div>
+
+          <div className="space-y-1 sm:col-span-6">
+            <Label htmlFor="add-bank-ledger" className="text-[11px]">
+              Ledger name <span className="font-normal text-black/40">(shown in books)</span>
+            </Label>
+            <Input
+              id="add-bank-ledger"
+              value={form.ledgerName}
+              onChange={(e) => patchForm({ ledgerName: e.target.value })}
+              placeholder="e.g. HDFC Current · Calicut"
+              className="h-9 rounded-xl"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 border-t border-[#EFEFEF] px-5 py-3.5 dark:border-white/10 sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 rounded-full"
+            onClick={() => {
+              onOpenChange(false);
+              resetForm();
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            className="h-9 rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+            disabled={saving || ifscLoading}
+            onClick={() => void handleSave()}
+          >
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Add bank
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function maskAccount(no: string | null | undefined): string {
   if (!no) return "—";
   if (no.length <= 4) return no;
