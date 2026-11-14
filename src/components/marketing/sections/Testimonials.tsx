@@ -154,7 +154,7 @@ export function Testimonials() {
 
   return (
     <section
-      id="setup"
+      id="testimonials"
       className="scroll-mt-24 relative overflow-hidden py-14 sm:py-20 lg:py-24"
       aria-labelledby="testimonials-heading"
       style={{
