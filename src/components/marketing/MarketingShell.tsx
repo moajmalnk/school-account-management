@@ -6,12 +6,12 @@ import { FeezoMark } from "@/components/brand/FeezoBrand";
 import { MarketingAuthActions } from "@/components/marketing/MarketingAuthActions";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingMobileNav } from "@/components/marketing/MarketingMobileNav";
+import { MarketingNavLink } from "@/components/marketing/MarketingNavLink";
 import { MARKETING_THEME_VARS } from "@/components/marketing/marketing-theme";
 import { WhatsAppFab } from "@/components/marketing/WhatsAppFab";
 import { useMarketingActiveSection } from "@/hooks/useMarketingActiveSection";
 import { BRAND } from "@/lib/brand";
-import { MARKETING } from "@/lib/marketing-content";
-import { handleMarketingSectionClick } from "@/lib/marketing-scroll";
+import { MARKETING_NAV } from "@/lib/seo/marketing-pages-content";
 import { pushMarketingEvent } from "@/lib/seo/analytics";
 
 export function MarketingShell({
@@ -59,7 +59,6 @@ export function MarketingShell({
           <Link
             to="/"
             className="shrink-0 rounded-lg outline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mkt-green)] transition-transform hover:scale-105 active:scale-95 flex items-center gap-2"
-            aria-label={`${BRAND.name} home`}
           >
             <FeezoMark className="h-9 w-9 sm:h-10 sm:w-10" />
             <div className="flex flex-col -gap-1">
@@ -74,21 +73,21 @@ export function MarketingShell({
 
           <nav
             className="hidden min-w-0 flex-1 items-center justify-center gap-4 xl:flex 2xl:gap-6"
-            aria-label="Page sections"
+            aria-label="Primary"
           >
-            {MARKETING.nav.map((item) => (
-              <a
-                key={item.id}
-                href={`#${item.id}`}
-                onClick={(event) => handleMarketingSectionClick(event, item.id)}
+            {MARKETING_NAV.map((item) => (
+              <MarketingNavLink
+                key={item.path}
+                path={item.path}
                 className={`shrink-0 whitespace-nowrap text-[14px] font-medium transition-colors hover:text-[var(--mkt-green-deep)] 2xl:text-[15px] ${
-                  item.id === activeSection
+                  item.path === activeSection
                     ? "text-[var(--mkt-green)]"
                     : "text-[var(--mkt-ink)] hover:text-[var(--mkt-green)]"
                 }`}
+                activeProps={{ className: "!text-[var(--mkt-green)]" }}
               >
                 {item.label}
-              </a>
+              </MarketingNavLink>
             ))}
             <Link
               to="/contact"

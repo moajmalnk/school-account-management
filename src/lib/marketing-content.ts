@@ -1,31 +1,35 @@
+import { HOME_PAGE, MARKETING_NAV } from "@/lib/seo/marketing-pages-content";
+
 /** Public marketing copy for feezo.app — English only. */
 
 export const MARKETING = {
-  title: "Feezo · School Accounts Simplified",
-  description:
-    "School accounts simplified — fees, receipts, reports in one place. Start a 14-day trial.",
+  title: HOME_PAGE.title,
+  description: HOME_PAGE.description,
   hero: {
-    brandLine: "Feezo Edu Books",
+    brandLine: "Feezo",
     headlineGreen: "School Accounts",
     headlineInk: "Simplified",
-    support:
-      "Fees, receipts, follow-ups, & school accounts in one clear platform ready in minutes.",
-    primaryCta: "Start 14-day trial",
-    secondaryCta: "Sign in",
+    support: HOME_PAGE.intro,
+    primaryCta: HOME_PAGE.primaryCta,
+    secondaryCta: HOME_PAGE.secondaryCta,
     /** Illustrated brand creative */
     brandArt: "/marketing/hero-dashboard.jpg",
     brandArtAlt: "Feezo school accounts brand illustration",
     /** Live product UI */
-    productImage: "/marketing/product-dashboard.jpg",
-    productImageAlt: "Feezo tenant dashboard with income, expenses, and cash position",
+    productImage: "/home/feezo-school-dashboard.webp",
+    productImageAlt: HOME_PAGE.heroImageAlt,
   },
-  nav: [
-    { id: "problems", label: "Why Feezo" },
-    { id: "product", label: "Product" },
-    { id: "features", label: "Features" },
-    { id: "setup", label: "Setup" },
-    { id: "pricing", label: "Pricing" },
-  ] as const,
+  /** @deprecated Prefer MARKETING_NAV — kept for gradual migration of hash-era helpers. */
+  nav: MARKETING_NAV.map((item) => ({
+    id: item.path.replace(/^\//, "") as
+      | "why-feezo"
+      | "product"
+      | "features"
+      | "setup"
+      | "pricing",
+    label: item.label,
+    path: item.path,
+  })),
   problems: {
     eyebrow: "The daily questions",
     title: "Stop chasing paper. Start seeing the full picture.",

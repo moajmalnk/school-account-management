@@ -9,17 +9,22 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WhyFeezoRouteImport } from './routes/why-feezo'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TenantRouteImport } from './routes/tenant'
 import { Route as SuperAdminRouteImport } from './routes/super-admin'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SetupRouteImport } from './routes/setup'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RefundPolicyRouteImport } from './routes/refund-policy'
+import { Route as ProductRouteImport } from './routes/product'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImpersonateRouteImport } from './routes/impersonate'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as FeaturesRouteImport } from './routes/features'
 import { Route as FamilyRouteImport } from './routes/family'
 import { Route as DownloadRouteImport } from './routes/download'
 import { Route as DataDeletionRouteImport } from './routes/data-deletion'
@@ -67,6 +72,11 @@ import { Route as StaffCollectTokenRouteImport } from './routes/staff/collect.$t
 import { Route as ParentStudentTokenRouteImport } from './routes/parent/student.$token'
 import { Route as FamilyJoinTokenRouteImport } from './routes/family/join.$token'
 
+const WhyFeezoRoute = WhyFeezoRouteImport.update({
+  id: '/why-feezo',
+  path: '/why-feezo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -87,6 +97,11 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SetupRoute = SetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
@@ -97,9 +112,19 @@ const RefundPolicyRoute = RefundPolicyRouteImport.update({
   path: '/refund-policy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProductRoute = ProductRouteImport.update({
+  id: '/product',
+  path: '/product',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -120,6 +145,11 @@ const HomeRoute = HomeRouteImport.update({
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeaturesRoute = FeaturesRouteImport.update({
+  id: '/features',
+  path: '/features',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FamilyRoute = FamilyRouteImport.update({
@@ -363,17 +393,22 @@ export interface FileRoutesByFullPath {
   '/data-deletion': typeof DataDeletionRoute
   '/download': typeof DownloadRoute
   '/family': typeof FamilyRouteWithChildren
+  '/features': typeof FeaturesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/home': typeof HomeRoute
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
+  '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
+  '/product': typeof ProductRoute
   '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/setup': typeof SetupRoute
   '/signup': typeof SignupRouteWithChildren
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
   '/terms': typeof TermsRoute
+  '/why-feezo': typeof WhyFeezoRoute
   '/family/academics': typeof FamilyAcademicsRoute
   '/family/attendance': typeof FamilyAttendanceRoute
   '/family/fees': typeof FamilyFeesRoute
@@ -421,14 +456,19 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/data-deletion': typeof DataDeletionRoute
   '/download': typeof DownloadRoute
+  '/features': typeof FeaturesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/home': typeof HomeRoute
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
+  '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
+  '/product': typeof ProductRoute
   '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/setup': typeof SetupRoute
   '/terms': typeof TermsRoute
+  '/why-feezo': typeof WhyFeezoRoute
   '/family/academics': typeof FamilyAcademicsRoute
   '/family/attendance': typeof FamilyAttendanceRoute
   '/family/fees': typeof FamilyFeesRoute
@@ -477,17 +517,22 @@ export interface FileRoutesById {
   '/data-deletion': typeof DataDeletionRoute
   '/download': typeof DownloadRoute
   '/family': typeof FamilyRouteWithChildren
+  '/features': typeof FeaturesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/home': typeof HomeRoute
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
+  '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
+  '/product': typeof ProductRoute
   '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/setup': typeof SetupRoute
   '/signup': typeof SignupRouteWithChildren
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
   '/terms': typeof TermsRoute
+  '/why-feezo': typeof WhyFeezoRoute
   '/family/academics': typeof FamilyAcademicsRoute
   '/family/attendance': typeof FamilyAttendanceRoute
   '/family/fees': typeof FamilyFeesRoute
@@ -538,17 +583,22 @@ export interface FileRouteTypes {
     | '/data-deletion'
     | '/download'
     | '/family'
+    | '/features'
     | '/forgot-password'
     | '/home'
     | '/impersonate'
     | '/login'
+    | '/pricing'
     | '/privacy'
+    | '/product'
     | '/refund-policy'
     | '/reset-password'
+    | '/setup'
     | '/signup'
     | '/super-admin'
     | '/tenant'
     | '/terms'
+    | '/why-feezo'
     | '/family/academics'
     | '/family/attendance'
     | '/family/fees'
@@ -596,14 +646,19 @@ export interface FileRouteTypes {
     | '/contact'
     | '/data-deletion'
     | '/download'
+    | '/features'
     | '/forgot-password'
     | '/home'
     | '/impersonate'
     | '/login'
+    | '/pricing'
     | '/privacy'
+    | '/product'
     | '/refund-policy'
     | '/reset-password'
+    | '/setup'
     | '/terms'
+    | '/why-feezo'
     | '/family/academics'
     | '/family/attendance'
     | '/family/fees'
@@ -651,17 +706,22 @@ export interface FileRouteTypes {
     | '/data-deletion'
     | '/download'
     | '/family'
+    | '/features'
     | '/forgot-password'
     | '/home'
     | '/impersonate'
     | '/login'
+    | '/pricing'
     | '/privacy'
+    | '/product'
     | '/refund-policy'
     | '/reset-password'
+    | '/setup'
     | '/signup'
     | '/super-admin'
     | '/tenant'
     | '/terms'
+    | '/why-feezo'
     | '/family/academics'
     | '/family/attendance'
     | '/family/fees'
@@ -711,23 +771,35 @@ export interface RootRouteChildren {
   DataDeletionRoute: typeof DataDeletionRoute
   DownloadRoute: typeof DownloadRoute
   FamilyRoute: typeof FamilyRouteWithChildren
+  FeaturesRoute: typeof FeaturesRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HomeRoute: typeof HomeRoute
   ImpersonateRoute: typeof ImpersonateRoute
   LoginRoute: typeof LoginRoute
+  PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
+  ProductRoute: typeof ProductRoute
   RefundPolicyRoute: typeof RefundPolicyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SetupRoute: typeof SetupRoute
   SignupRoute: typeof SignupRouteWithChildren
   SuperAdminRoute: typeof SuperAdminRouteWithChildren
   TenantRoute: typeof TenantRouteWithChildren
   TermsRoute: typeof TermsRoute
+  WhyFeezoRoute: typeof WhyFeezoRoute
   ParentStudentTokenRoute: typeof ParentStudentTokenRoute
   StaffCollectTokenRoute: typeof StaffCollectTokenRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/why-feezo': {
+      id: '/why-feezo'
+      path: '/why-feezo'
+      fullPath: '/why-feezo'
+      preLoaderRoute: typeof WhyFeezoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -756,6 +828,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/setup': {
+      id: '/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof SetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset-password': {
       id: '/reset-password'
       path: '/reset-password'
@@ -770,11 +849,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RefundPolicyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/product': {
+      id: '/product'
+      path: '/product'
+      fullPath: '/product'
+      preLoaderRoute: typeof ProductRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/privacy': {
       id: '/privacy'
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -803,6 +896,13 @@ declare module '@tanstack/react-router' {
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/features': {
+      id: '/features'
+      path: '/features'
+      fullPath: '/features'
+      preLoaderRoute: typeof FeaturesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/family': {
@@ -1260,17 +1360,22 @@ const rootRouteChildren: RootRouteChildren = {
   DataDeletionRoute: DataDeletionRoute,
   DownloadRoute: DownloadRoute,
   FamilyRoute: FamilyRouteWithChildren,
+  FeaturesRoute: FeaturesRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   HomeRoute: HomeRoute,
   ImpersonateRoute: ImpersonateRoute,
   LoginRoute: LoginRoute,
+  PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
+  ProductRoute: ProductRoute,
   RefundPolicyRoute: RefundPolicyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SetupRoute: SetupRoute,
   SignupRoute: SignupRouteWithChildren,
   SuperAdminRoute: SuperAdminRouteWithChildren,
   TenantRoute: TenantRouteWithChildren,
   TermsRoute: TermsRoute,
+  WhyFeezoRoute: WhyFeezoRoute,
   ParentStudentTokenRoute: ParentStudentTokenRoute,
   StaffCollectTokenRoute: StaffCollectTokenRoute,
 }

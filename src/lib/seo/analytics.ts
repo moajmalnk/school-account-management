@@ -4,7 +4,13 @@ export type MarketingCtaLocation =
   | "floating"
   | "footer"
   | "form"
-  | "download";
+  | "download"
+  | "why_feezo"
+  | "product"
+  | "features"
+  | "setup"
+  | "pricing"
+  | "home_section";
 
 export type MarketingEventName =
   | "trial_start"

@@ -9,14 +9,14 @@ import { MARKETING, MARKETING_PRICE_NOTE } from "@/lib/marketing-content";
 
 const { pricing } = MARKETING;
 
-export function Pricing() {
+export function Pricing({ showHeading = true }: { showHeading?: boolean }) {
   const reduce = useReducedMotion();
 
   return (
     <section
-      id="pricing"
+      id={showHeading ? "pricing" : undefined}
       className="scroll-mt-24 relative py-14 sm:py-20 lg:py-24 overflow-hidden"
-      aria-labelledby="pricing-heading"
+      aria-labelledby={showHeading ? "pricing-heading" : undefined}
       style={{
         background:
           "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(143,202,74,0.13) 0%, transparent 55%)," +
@@ -67,37 +67,43 @@ export function Pricing() {
       </div>
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6 relative z-10">
-        <SectionReveal className="mx-auto max-w-2xl text-center">
-          <h2
-            id="pricing-heading"
-            className="text-[clamp(1.75rem,4vw,2.5rem)] font-bold tracking-tight text-[var(--mkt-ink)]"
-          >
-            Start with a{" "}
-            <motion.span
-              className="inline-block px-3 py-1 rounded text-white ml-1"
-              style={{
-                background: "linear-gradient(135deg, #8FCA4A, #5ec45f)",
-                boxShadow: "0 4px 18px rgba(143,202,74,0.4)",
-              }}
-              animate={{
-                boxShadow: [
-                  "0 4px 18px rgba(143,202,74,0.3)",
-                  "0 4px 30px rgba(143,202,74,0.65)",
-                  "0 4px 18px rgba(143,202,74,0.3)",
-                ],
-              }}
-              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+        {showHeading ? (
+          <SectionReveal className="mx-auto max-w-2xl text-center">
+            <h2
+              id="pricing-heading"
+              className="text-[clamp(1.75rem,4vw,2.5rem)] font-bold tracking-tight text-[var(--mkt-ink)]"
             >
-              14-day trial
-            </motion.span>
-          </h2>
-          <p className="mt-4 text-[13px] leading-relaxed text-[var(--mkt-ink)] font-medium max-w-[280px] mx-auto">
-            Every plan includes a full evaluation period.
-            <br />
-            Sign in when your school is ready.
-          </p>
-          <PricingLocaleBar />
-        </SectionReveal>
+              Start with a{" "}
+              <motion.span
+                className="inline-block px-3 py-1 rounded text-white ml-1"
+                style={{
+                  background: "linear-gradient(135deg, #8FCA4A, #5ec45f)",
+                  boxShadow: "0 4px 18px rgba(143,202,74,0.4)",
+                }}
+                animate={{
+                  boxShadow: [
+                    "0 4px 18px rgba(143,202,74,0.3)",
+                    "0 4px 30px rgba(143,202,74,0.65)",
+                    "0 4px 18px rgba(143,202,74,0.3)",
+                  ],
+                }}
+                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+              >
+                14-day trial
+              </motion.span>
+            </h2>
+            <p className="mt-4 text-[13px] leading-relaxed text-[var(--mkt-ink)] font-medium max-w-[280px] mx-auto">
+              Every plan includes a full evaluation period.
+              <br />
+              Sign in when your school is ready.
+            </p>
+            <PricingLocaleBar />
+          </SectionReveal>
+        ) : (
+          <div className="mx-auto max-w-2xl text-center">
+            <PricingLocaleBar />
+          </div>
+        )}
 
         <StaggerReveal className="mt-10 grid gap-5 sm:mt-12 lg:grid-cols-3">
           {pricing.plans.map((plan) => (

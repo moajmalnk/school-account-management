@@ -3,14 +3,15 @@ import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { FeezoBrand } from "@/components/brand/FeezoBrand";
+import { SIGNUP_PAGE_SEO } from "@/lib/seo/marketing-pages-content";
 import { SIGNUP_STEPS } from "@/lib/signup-content";
 import { cn } from "@/lib/utils";
 
 export function SignupShell({
   step,
   children,
-  title = "Create Your School",
-  subtitle = "Set up your Feezo Edu Books account in a few simple steps.",
+  title = SIGNUP_PAGE_SEO.h1,
+  subtitle = SIGNUP_PAGE_SEO.reassurance,
 }: {
   step: number;
   children: ReactNode;
@@ -38,7 +39,7 @@ export function SignupShell({
 
         <div className="rounded-[28px] border border-white/80 bg-white px-4 py-6 shadow-[0_24px_60px_-40px_rgba(0,0,0,0.35)] sm:px-8 sm:py-8">
           <p className="text-[11px] font-bold uppercase tracking-wider text-[#6BA832]">
-            Feezo Edu Books Registration
+            Feezo Registration
           </p>
           <h1 className="mt-1.5 text-[1.55rem] font-semibold tracking-tight text-black sm:text-[1.85rem]">
             {title}

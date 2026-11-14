@@ -10,8 +10,7 @@ import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { easeOutExpo, staggerContainer } from "@/components/marketing/motion";
 import { useMarketingActiveSection } from "@/hooks/useMarketingActiveSection";
 import { BRAND } from "@/lib/brand";
-import { MARKETING } from "@/lib/marketing-content";
-import { handleMarketingSectionClick } from "@/lib/marketing-scroll";
+import { MARKETING_NAV } from "@/lib/seo/marketing-pages-content";
 import { pushMarketingEvent } from "@/lib/seo/analytics";
 import { cn } from "@/lib/utils";
 
@@ -100,7 +99,6 @@ export function MarketingFooter() {
             <Link
               to="/"
               className="inline-flex items-center gap-3 rounded-xl outline-offset-4 transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              aria-label={`${BRAND.name} home`}
             >
               <FeezoMark className="h-11 w-11" />
               <div className="leading-tight">
@@ -179,13 +177,12 @@ export function MarketingFooter() {
                 Explore
               </p>
               <nav className="mt-4 flex flex-col gap-2.5" aria-label="Footer navigation">
-                {MARKETING.nav.map((item) => (
+                {MARKETING_NAV.map((item) => (
                   <FooterNavLink
-                    key={item.id}
-                    href={`#${item.id}`}
-                    onClick={(event) => handleMarketingSectionClick(event, item.id)}
+                    key={item.path}
+                    href={item.path}
                     className={
-                      item.id === activeSection
+                      item.path === activeSection
                         ? "text-[var(--mkt-green)] hover:text-[var(--mkt-green-deep)]"
                         : undefined
                     }
@@ -194,6 +191,7 @@ export function MarketingFooter() {
                   </FooterNavLink>
                 ))}
                 <FooterNavLink href={BRAND.contactPath}>Contact</FooterNavLink>
+                <FooterNavLink href={BRAND.downloadPath}>Download</FooterNavLink>
               </nav>
             </div>
 

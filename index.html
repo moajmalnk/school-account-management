@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
-      content="School accounts simplified — fees, receipts, reports in one place. Start a 14-day trial with Feezo Edu Books."
+      content="Feezo is a school management system and mini ERP for schools. Collect fees, issue online receipts and manage accounts. Try it free for 14 days."
     />
     <meta name="theme-color" content="#8FCA4A" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -14,10 +14,10 @@
     <meta name="apple-mobile-web-app-title" content="Feezo" />
     <meta name="application-name" content="Feezo" />
     <meta name="format-detection" content="telephone=no" />
-    <meta property="og:title" content="Feezo · School Accounts Simplified" />
+    <meta property="og:title" content="Feezo | School Management System with Fees Collection" />
     <meta
       property="og:description"
-      content="School accounts simplified — fees, receipts, reports in one place. Start a 14-day trial."
+      content="Feezo is a school management system and mini ERP for schools. Collect fees, issue online receipts and manage accounts. Try it free for 14 days."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://www.feezo.app/" />
@@ -25,15 +25,15 @@
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Feezo · School Accounts Simplified" />
+    <meta name="twitter:title" content="Feezo | School Management System with Fees Collection" />
     <meta
       name="twitter:description"
-      content="School accounts simplified — fees, receipts, reports in one place. Start a 14-day trial."
+      content="Feezo is a school management system and mini ERP for schools. Collect fees, issue online receipts and manage accounts. Try it free for 14 days."
     />
     <meta name="twitter:image" content="https://www.feezo.app/og/feezo-share.jpg" />
     <link rel="canonical" href="https://www.feezo.app/" />
     <meta name="robots" content="index, follow" />
-    <title>Feezo · School Accounts Simplified</title>
+    <title>Feezo | School Management System with Fees Collection</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="mask-icon" href="/favicon.svg" color="#0F766E" />
@@ -43,8 +43,9 @@
       #root{min-height:100vh}
       #boot-shell{position:fixed;inset:0;z-index:40;overflow:auto;background:#fff;pointer-events:none}
       #boot-shell .boot-inner{max-width:64rem;margin:0 auto;padding:4.75rem 1.25rem 2rem;text-align:center}
-      #boot-shell h1{margin:0;font-size:clamp(2.75rem,8vw,5.25rem);line-height:1.08;font-weight:800;letter-spacing:-0.02em;color:#1a1c2c}
-      #boot-shell h1 span{color:#3f7a1f}
+      #boot-shell .boot-eyebrow{margin:0;font-size:0.9rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#64748b}
+      #boot-shell h1{margin:0.75rem 0 0;font-size:clamp(1.85rem,5.5vw,3.25rem);line-height:1.12;font-weight:800;letter-spacing:-0.02em;color:#1a1c2c}
+      #boot-shell .boot-tagline{margin:0.75rem 0 0;font-size:clamp(1.05rem,2.4vw,1.35rem);font-weight:600;color:#3f7a1f}
       #boot-shell img{display:block;width:min(100%,1040px);height:auto;margin:2rem auto 0;aspect-ratio:16/9;object-fit:contain}
       #boot-shell p{max-width:32rem;margin:1.5rem auto 0;font-size:clamp(1rem,2.4vw,1.375rem);font-weight:500;line-height:1.35;color:#1a1c2c}
       #boot-shell.is-done{opacity:0;transition:opacity .2s ease}
@@ -63,8 +64,8 @@
       as="image"
       type="image/webp"
       fetchpriority="high"
-      href="/home/explode-start-640.webp"
-      imagesrcset="/home/explode-start-640.webp 640w, /home/explode-start-720.webp 720w"
+      href="/home/feezo-school-dashboard.webp"
+      imagesrcset="/home/feezo-school-dashboard.webp 640w, /home/feezo-school-dashboard-720.webp 720w"
       imagesizes="(max-width: 768px) 100vw, 720px"
     />
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
@@ -150,19 +151,21 @@
   <body class="bg-white antialiased">
     <div id="boot-shell">
       <div class="boot-inner">
-        <h1>Welcome To<br /><span>Feezo</span></h1>
+        <p class="boot-eyebrow">Welcome To Feezo</p>
+        <h1>School Management System for Fees, Receipts &amp; Accounts</h1>
+        <p class="boot-tagline">School accounts simplified</p>
         <img
-          src="/home/explode-start-640.webp"
-          srcset="/home/explode-start-640.webp 640w, /home/explode-start-720.webp 720w"
+          src="/home/feezo-school-dashboard.webp"
+          srcset="/home/feezo-school-dashboard.webp 640w, /home/feezo-school-dashboard-720.webp 720w"
           sizes="(max-width: 768px) 100vw, 720px"
           width="640"
           height="360"
-          alt="Feezo tenant dashboard with income, expenses, and cash position"
+          alt="Feezo school management system dashboard showing fee income, expenses and cash position"
           fetchpriority="high"
           loading="eager"
           decoding="sync"
         />
-        <p>Fees, receipts, follow-ups, &amp; school accounts in one clear platform ready in minutes.</p>
+        <p>Feezo is a school management system and mini ERP for schools. Collect fees, issue online receipts, send follow-ups and manage school accounts in one place, with no accounting staff needed.</p>
       </div>
     </div>
     <div id="root"></div>
@@ -186,13 +189,22 @@
     </script>
     <noscript>
       <main>
-        <h1>Feezo · School accounts simplified</h1>
         <p>
-          Fees, receipts, follow-ups, and school accounts in one place. Feezo is a mini ERP for
-          schools, operated by MAC ADZ in Malappuram, Kerala.
+          Feezo is a school management system and mini ERP for schools. Collect fees, issue online
+          receipts and manage accounts. Operated by MAC ADZ in Malappuram, Kerala.
         </p>
         <p>
           <a href="/signup/school">Start a 14-day trial</a>
+          ·
+          <a href="/why-feezo">Why Feezo</a>
+          ·
+          <a href="/product">Product</a>
+          ·
+          <a href="/features">Features</a>
+          ·
+          <a href="/setup">Setup</a>
+          ·
+          <a href="/pricing">Pricing</a>
           ·
           <a href="/contact">Contact</a>
           ·

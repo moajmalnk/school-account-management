@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
 
-export function FeezoMark({ className }: { className?: string }) {
+export function FeezoMark({ className, alt = "Feezo" }: { className?: string; alt?: string }) {
   return (
     <img
       src={BRAND.mark}
-      alt=""
+      alt={alt}
       width={96}
       height={96}
       decoding="async"

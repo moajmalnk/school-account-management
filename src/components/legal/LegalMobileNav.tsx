@@ -4,11 +4,11 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { MarketingNavLink } from "@/components/marketing/MarketingNavLink";
 import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { MARKETING_THEME_VARS } from "@/components/marketing/marketing-theme";
-import { MARKETING } from "@/lib/marketing-content";
-import { handleMarketingSectionClick, preloadMarketingSections } from "@/lib/marketing-scroll";
 import { LEGAL_PAGES, type LegalPageId } from "@/lib/legal-pages";
+import { MARKETING_NAV } from "@/lib/seo/marketing-pages-content";
 import { cn } from "@/lib/utils";
 
 function MenuToggle({
@@ -56,7 +56,6 @@ export function LegalMobileNav({ activePage }: { activePage?: LegalPageId }) {
   const close = useCallback(() => setOpen(false), []);
 
   const openMenu = useCallback(() => {
-    preloadMarketingSections();
     setOpen(true);
   }, []);
 
@@ -201,18 +200,19 @@ export function LegalMobileNav({ activePage }: { activePage?: LegalPageId }) {
                         Explore
                       </p>
                       <ul className="mt-2 space-y-1">
-                        {MARKETING.nav.map((item) => (
-                          <li key={item.id}>
-                            <a
-                              href={`/#${item.id}`}
-                              onClick={(event) => {
-                                handleMarketingSectionClick(event, item.id, close);
+                        {MARKETING_NAV.map((item) => (
+                          <li key={item.path}>
+                            <MarketingNavLink
+                              path={item.path}
+                              onClick={() => {
+                                document.body.style.overflow = "";
+                                close();
                               }}
                               className="flex items-center justify-between rounded-2xl px-4 py-2.5 text-[14px] font-medium text-[var(--mkt-ink)] transition hover:bg-white hover:shadow-sm"
                             >
                               {item.label}
                               <ArrowRight className="h-3.5 w-3.5 text-[var(--mkt-muted)]" />
-                            </a>
+                            </MarketingNavLink>
                           </li>
                         ))}
                       </ul>

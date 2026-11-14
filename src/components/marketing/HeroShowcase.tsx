@@ -4,8 +4,8 @@ import { motion, useReducedMotion } from "motion/react";
 import { easeOutExpo } from "@/components/marketing/motion";
 
 const VIDEO_SRC = "/explode_video.mp4";
-const POSTER_START_MID = "/home/explode-start-640.webp";
-const POSTER_START_MOBILE = "/home/explode-start-720.webp";
+const POSTER_START_MID = "/home/feezo-school-dashboard.webp";
+const POSTER_START_MOBILE = "/home/feezo-school-dashboard-720.webp";
 
 /** Bump when the video file changes so stale copies are evicted. */
 const VIDEO_VERSION = "v3";

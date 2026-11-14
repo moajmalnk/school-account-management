@@ -11,7 +11,6 @@ import {
   MapPin,
   Phone,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -45,6 +44,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { BRAND } from "@/lib/brand";
 import { pushMarketingEvent } from "@/lib/seo/analytics";
+import { CONTACT_PAGE_SEO } from "@/lib/seo/marketing-pages-content";
 import { applyDocumentSeo, PUBLIC_PAGE_SEO } from "@/lib/seo/public-pages";
 import { cn } from "@/lib/utils";
 
@@ -167,25 +167,23 @@ export function ContactPage() {
       />
 
       <section className="relative mx-auto max-w-6xl px-5 pb-10 pt-10 text-center sm:px-8 sm:pt-16 lg:px-10">
-        <motion.p
-          {...fadeUp()}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mkt-green)]/25 bg-white/80 px-3 py-1 text-[12px] font-semibold text-[var(--mkt-green-deep)] shadow-sm"
-        >
-          <Sparkles className="h-3.5 w-3.5" aria-hidden />
-          We're here to help
-        </motion.p>
         <motion.h1
-          {...fadeUp(0.05)}
-          className="mx-auto mt-4 max-w-3xl text-[2.1rem] font-bold leading-[1.1] tracking-tight text-[var(--mkt-ink)] sm:text-[3rem]"
+          {...fadeUp()}
+          className="mx-auto max-w-3xl text-[2.1rem] font-bold leading-[1.1] tracking-tight text-[var(--mkt-ink)] sm:text-[3rem]"
         >
-          Let's talk about <span className="text-[var(--mkt-green)]">your school</span>
+          {CONTACT_PAGE_SEO.h1}
         </motion.h1>
+        <motion.h2
+          {...fadeUp(0.05)}
+          className="mx-auto mt-6 max-w-2xl text-[1.25rem] font-semibold tracking-tight text-[var(--mkt-ink)] sm:text-[1.4rem]"
+        >
+          {CONTACT_PAGE_SEO.bookDemo.h2}
+        </motion.h2>
         <motion.p
           {...fadeUp(0.1)}
-          className="mx-auto mt-4 max-w-2xl text-[15px] leading-relaxed text-[var(--mkt-muted)] sm:text-[17px]"
+          className="mx-auto mt-3 max-w-2xl text-[15px] leading-relaxed text-[var(--mkt-muted)] sm:text-[17px]"
         >
-          Questions about fees, receipts, pricing or getting started? Reach the Feezo team the way
-          that suits you — we reply to every message.
+          {CONTACT_PAGE_SEO.bookDemo.body}
         </motion.p>
         <motion.div
           {...fadeUp(0.15)}
@@ -201,8 +199,14 @@ export function ContactPage() {
 
       <section
         className="relative mx-auto max-w-6xl px-5 sm:px-8 lg:px-10"
-        aria-label="Contact channels"
+        aria-labelledby="contact-details-heading"
       >
+        <h2
+          id="contact-details-heading"
+          className="mb-5 text-center text-[1.35rem] font-bold tracking-tight text-[var(--mkt-ink)] sm:text-[1.5rem]"
+        >
+          {CONTACT_PAGE_SEO.details.h2}
+        </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {CHANNELS.map((ch, i) => (
             <motion.div key={ch.id} {...fadeUp(0.05 * i)}>
@@ -561,7 +565,7 @@ export function ContactForm({ compact = false }: { compact?: boolean }) {
       className="relative rounded-[28px] border border-[var(--mkt-line)] bg-white p-5 shadow-[0_24px_60px_-40px_rgba(26,28,44,0.5)] sm:p-8"
     >
       <h2 className="text-[1.35rem] font-bold tracking-tight text-[var(--mkt-ink)] sm:text-[1.6rem]">
-        {compact ? "Request a demo" : "Send us a message"}
+        {compact ? "Request a demo" : CONTACT_PAGE_SEO.form.h2}
       </h2>
       <p className="mt-1 text-[14px] text-[var(--mkt-muted)]">
         Tell us a little about your school and we'll get back with the right person.

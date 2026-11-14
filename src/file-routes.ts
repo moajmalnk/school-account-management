@@ -4,6 +4,41 @@
  */
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
+    "/why-feezo": {
+      id: "/why-feezo";
+      path: "/why-feezo";
+      fullPath: "/why-feezo";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
+    "/product": {
+      id: "/product";
+      path: "/product";
+      fullPath: "/product";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
+    "/features": {
+      id: "/features";
+      path: "/features";
+      fullPath: "/features";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
+    "/setup": {
+      id: "/setup";
+      path: "/setup";
+      fullPath: "/setup";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
+    "/pricing": {
+      id: "/pricing";
+      path: "/pricing";
+      fullPath: "/pricing";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
     "/download": {
       id: "/download";
       path: "/download";

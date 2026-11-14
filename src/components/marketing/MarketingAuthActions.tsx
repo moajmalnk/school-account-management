@@ -75,7 +75,7 @@ export function MarketingAuthActions({
           )}
           onClick={onNavigate}
         >
-          Start 14-day trial
+          Start Free Trial
           <ArrowRight className="h-4 w-4" aria-hidden />
         </TrialSignupLink>
         <Link
@@ -87,7 +87,7 @@ export function MarketingAuthActions({
             "mt-3 h-11 w-full rounded-xl border border-[var(--mkt-line)] bg-white text-[14px] hover:border-[var(--mkt-green)]/40",
           )}
         >
-          Login
+          Sign in
         </Link>
       </>
     );
@@ -103,7 +103,7 @@ export function MarketingAuthActions({
           "hidden h-10 whitespace-nowrap px-3 text-[14px] xl:inline-flex 2xl:px-4",
         )}
       >
-        Login
+        Sign in
       </Link>
       <TrialSignupLink
         ctaLocation="header"
@@ -112,7 +112,7 @@ export function MarketingAuthActions({
           "hidden h-10 whitespace-nowrap px-3 text-[13px] sm:inline-flex sm:px-4 sm:text-[14px] 2xl:px-5",
         )}
       >
-        Start 14-day trial
+        Start Free Trial
       </TrialSignupLink>
     </div>
   );

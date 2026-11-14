@@ -14,23 +14,23 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { MarketingAuthActions } from "@/components/marketing/MarketingAuthActions";
+import { MarketingNavLink } from "@/components/marketing/MarketingNavLink";
 import { MARKETING_THEME_VARS } from "@/components/marketing/marketing-theme";
 import { useMarketingActiveSection } from "@/hooks/useMarketingActiveSection";
 import { BRAND } from "@/lib/brand";
-import { MARKETING } from "@/lib/marketing-content";
-import { handleMarketingSectionClick, preloadMarketingSections } from "@/lib/marketing-scroll";
+import { MARKETING_NAV } from "@/lib/seo/marketing-pages-content";
 import { pushMarketingEvent } from "@/lib/seo/analytics";
 import { cn } from "@/lib/utils";
 
 const NAV_META: Record<
-  (typeof MARKETING.nav)[number]["id"],
+  (typeof MARKETING_NAV)[number]["path"],
   { icon: typeof Sparkles; hint: string }
 > = {
-  problems: { icon: Sparkles, hint: "Stop chasing paper registers" },
-  product: { icon: LayoutDashboard, hint: "Dashboard, students & fees" },
-  features: { icon: Grid3x3, hint: "Everything in one workspace" },
-  setup: { icon: Settings2, hint: "Live in minutes, not weeks" },
-  pricing: { icon: Tag, hint: "14-day free trial included" },
+  "/why-feezo": { icon: Sparkles, hint: "Stop chasing paper registers" },
+  "/product": { icon: LayoutDashboard, hint: "Dashboard, students & fees" },
+  "/features": { icon: Grid3x3, hint: "Everything in one workspace" },
+  "/setup": { icon: Settings2, hint: "Live in minutes, not weeks" },
+  "/pricing": { icon: Tag, hint: "14-day free trial included" },
 };
 
 function MenuToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
@@ -72,11 +72,6 @@ export function MarketingMobileNav() {
 
   const close = useCallback(() => setOpen(false), []);
 
-  const openMenu = useCallback(() => {
-    preloadMarketingSections();
-    setOpen(true);
-  }, []);
-
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -106,7 +101,7 @@ export function MarketingMobileNav() {
 
   return (
     <div className="xl:hidden">
-      <MenuToggle open={open} onClick={() => (open ? close() : openMenu())} />
+      <MenuToggle open={open} onClick={() => (open ? close() : setOpen(true))} />
 
       {mounted
         ? createPortal(
@@ -139,21 +134,6 @@ export function MarketingMobileNav() {
                       background: "linear-gradient(165deg, #ffffff 0%, #f8fff4 42%, #f4fbf0 100%)",
                     }}
                   >
-                    <div
-                      className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full opacity-70"
-                      style={{
-                        background:
-                          "radial-gradient(circle, rgba(143,202,74,0.35) 0%, transparent 68%)",
-                      }}
-                    />
-                    <div
-                      className="pointer-events-none absolute -bottom-24 -left-10 h-48 w-48 rounded-full opacity-50"
-                      style={{
-                        background:
-                          "radial-gradient(circle, rgba(107,168,50,0.22) 0%, transparent 70%)",
-                      }}
-                    />
-
                     <div className="relative flex items-center justify-between border-b border-[var(--mkt-line)] px-5 py-4">
                       <div>
                         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--mkt-muted)]">
@@ -173,17 +153,14 @@ export function MarketingMobileNav() {
                       </button>
                     </div>
 
-                    <nav
-                      className="relative flex-1 overflow-y-auto px-3 py-4"
-                      aria-label="Page sections"
-                    >
+                    <nav className="relative flex-1 overflow-y-auto px-3 py-4" aria-label="Primary">
                       <ul className="space-y-2">
-                        {MARKETING.nav.map((item, index) => {
-                          const meta = NAV_META[item.id];
+                        {MARKETING_NAV.map((item, index) => {
+                          const meta = NAV_META[item.path];
                           const Icon = meta.icon;
                           return (
                             <motion.li
-                              key={item.id}
+                              key={item.path}
                               initial={{ opacity: 0, x: 24 }}
                               animate={{ opacity: 1, x: 0 }}
                               transition={{
@@ -192,15 +169,16 @@ export function MarketingMobileNav() {
                                 ease: [0.22, 1, 0.36, 1],
                               }}
                             >
-                              <a
-                                href={`#${item.id}`}
-                                onClick={(event) =>
-                                  handleMarketingSectionClick(event, item.id, close)
-                                }
+                              <MarketingNavLink
+                                path={item.path}
+                                onClick={() => {
+                                  document.body.style.overflow = "";
+                                  close();
+                                }}
                                 className={cn(
                                   "group flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition-all duration-200",
                                   "border-transparent bg-white/55 hover:border-[var(--mkt-green)]/30 hover:bg-white hover:shadow-[0_8px_24px_rgba(143,202,74,0.14)]",
-                                  item.id === activeSection &&
+                                  item.path === activeSection &&
                                     "border-[var(--mkt-green)]/25 bg-[var(--mkt-soft)]/80",
                                 )}
                               >
@@ -216,7 +194,7 @@ export function MarketingMobileNav() {
                                   </span>
                                 </span>
                                 <ArrowRight className="h-4 w-4 shrink-0 text-[var(--mkt-muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--mkt-green)]" />
-                              </a>
+                              </MarketingNavLink>
                             </motion.li>
                           );
                         })}
@@ -224,7 +202,7 @@ export function MarketingMobileNav() {
                           initial={{ opacity: 0, x: 24 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{
-                            delay: 0.06 + MARKETING.nav.length * 0.05,
+                            delay: 0.06 + MARKETING_NAV.length * 0.05,
                             duration: 0.35,
                             ease: [0.22, 1, 0.36, 1],
                           }}

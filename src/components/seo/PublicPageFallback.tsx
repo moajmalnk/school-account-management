@@ -17,11 +17,11 @@ const SHARED_LINKS = [
 function pageForPath(pathname: string): FallbackPage {
   if (pathname === "/signup" || pathname.startsWith("/signup/")) {
     return {
-      title: "Start a 14-day Feezo trial",
+      title: "Start Your 14-Day Free Trial",
       paragraphs: [
-        "Set up your school in about a minute. Full access for 14 days, and no card is required.",
+        "No card required. Set up your school and try Feezo with your own data for 14 days.",
         "This step asks for the school name, board, state, district, phone number, and workspace address. The next step creates the admin login.",
-        `${BRAND.name} is school accounts software for fees, receipts, follow-ups, and reports. It is operated by ${BRAND.legal.operator} in ${BRAND.contact.location}.`,
+        `${BRAND.name} is a school management system for fees, receipts, follow-ups, and accounts. It is operated by ${BRAND.legal.operator} in ${BRAND.contact.location}.`,
       ],
       links: SHARED_LINKS,
     };
@@ -31,20 +31,78 @@ function pageForPath(pathname: string): FallbackPage {
     return {
       title: "Contact Feezo",
       paragraphs: [
-        `Questions about fees, receipts, pricing, or getting started? Email ${BRAND.contact.email} or call ${BRAND.contact.phoneDisplay}.`,
-        `${BRAND.contact.hours}. ${BRAND.contact.responseTime}.`,
+        `Talk to the Feezo team in Malappuram, Kerala. Book a demo or ask about fee collection software and setup.`,
+        `Email ${BRAND.contact.email} or call ${BRAND.contact.phoneDisplay}.`,
         BRAND.contact.registeredAddress,
       ],
       links: SHARED_LINKS,
     };
   }
 
+  if (pathname === "/why-feezo") {
+    return {
+      title: "Why Schools Choose Feezo for Fee Collection and Accounts",
+      paragraphs: [
+        "Feezo gives schools one simple system for fee collection, receipts, follow-ups and accounts.",
+        MARKETING.description,
+      ],
+      links: SHARED_LINKS,
+    };
+  }
+
+  if (pathname === "/product") {
+    return {
+      title: "Feezo: Mini ERP for School Fees and Accounts",
+      paragraphs: [MARKETING.description],
+      links: SHARED_LINKS,
+    };
+  }
+
+  if (pathname === "/features") {
+    return {
+      title: "Feezo Features for School Fee Management",
+      paragraphs: [
+        "Online fee receipts, WhatsApp fee reminders, fee due tracking, reports and school accounts.",
+      ],
+      links: SHARED_LINKS,
+    };
+  }
+
+  if (pathname === "/setup") {
+    return {
+      title: "Set Up Feezo for Your School in Minutes",
+      paragraphs: [
+        "Create your account, add students, set fees and start collecting. Free for 14 days.",
+      ],
+      links: SHARED_LINKS,
+    };
+  }
+
+  if (pathname === "/pricing") {
+    return {
+      title: "Feezo Pricing: Start with a 14-Day Free Trial",
+      paragraphs: [
+        "Compare Feezo plans for schools and academies and start with a free 14-day trial.",
+      ],
+      links: SHARED_LINKS,
+    };
+  }
+
+  if (pathname === "/download") {
+    return {
+      title: "Download the Feezo App for Schools and Parents",
+      paragraphs: [
+        "Check fee dues, view receipts and stay updated. Download Feezo from the App Store or Google Play.",
+      ],
+      links: SHARED_LINKS,
+    };
+  }
+
   return {
-    title: "School accounts, simplified",
+    title: "School Management System for Fees, Receipts & Accounts",
     paragraphs: [
       MARKETING.hero.support,
       MARKETING.description,
-      `Feezo is a mini ERP for schools: ${MARKETING.features.items.map((item) => item.title.toLowerCase()).join(", ")}.`,
       `Plans start with a 14-day trial. ${BRAND.name} is operated by ${BRAND.legal.operator} in ${BRAND.contact.location}, India.`,
     ],
     links: SHARED_LINKS,
@@ -80,6 +138,11 @@ export function PublicPageFallback({ pathname }: { pathname: string }) {
 export function isPublicIndexablePath(pathname: string): boolean {
   return (
     pathname === "/" ||
+    pathname === "/why-feezo" ||
+    pathname === "/product" ||
+    pathname === "/features" ||
+    pathname === "/setup" ||
+    pathname === "/pricing" ||
     pathname === "/contact" ||
     pathname === "/download" ||
     pathname === "/terms" ||

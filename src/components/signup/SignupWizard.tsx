@@ -247,10 +247,10 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
   return (
     <SignupShell
       step={step}
-      title={step === 1 ? "Start your free trial" : "Create your admin account"}
+      title={step === 1 ? "Start Your 14-Day Free Trial" : "Create your admin account"}
       subtitle={
         step === 1
-          ? "Two quick steps · about a minute · no card required."
+          ? "No card required. Set up your school and try Feezo with your own data for 14 days."
           : `Almost done — this is how you'll sign in to ${form.schoolName || "your school"}.`
       }
     >

@@ -1,11 +1,20 @@
 /**
  * Serve a real HTTP 404 for unknown paths while keeping SPA routes on index.html.
- * Prerendered pages (/ , /contact , /download) are left to the filesystem.
+ * Prerendered marketing pages are left to the filesystem.
  *
  * Uses the Edge passthrough header directly so we don't depend on @vercel/edge types.
  */
 
-const PRERENDERED = new Set(["/", "/contact", "/download"]);
+const PRERENDERED = new Set([
+  "/",
+  "/why-feezo",
+  "/product",
+  "/features",
+  "/setup",
+  "/pricing",
+  "/contact",
+  "/download",
+]);
 
 const SPA_PREFIXES = [
   "/login",

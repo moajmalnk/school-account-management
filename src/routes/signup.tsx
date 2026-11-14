@@ -1,7 +1,7 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 
-import { applyNoindex } from "@/lib/seo/public-pages";
+import { applyDocumentSeo, PUBLIC_PAGE_SEO } from "@/lib/seo/public-pages";
 
 export const Route = createFileRoute("/signup")({
   component: SignupLayout,
@@ -9,8 +9,7 @@ export const Route = createFileRoute("/signup")({
 
 function SignupLayout() {
   useEffect(() => {
-    document.title = "Feezo · Start 14-day trial";
-    applyNoindex();
+    applyDocumentSeo(PUBLIC_PAGE_SEO.signup);
   }, []);
 
   return <Outlet />;
